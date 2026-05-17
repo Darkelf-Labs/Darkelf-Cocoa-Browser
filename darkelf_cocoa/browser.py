@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v4.3.6 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v4.3.7 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -2000,8 +2000,6 @@ class DarkelfMiniAISentinel:
             "btn_new_tab",
             "addr",
             "urlbar",
-            "btn_zoom_out",
-            "btn_zoom_in",
             "btn_js",
             "btn_nuke",
         ]
@@ -2030,8 +2028,6 @@ class DarkelfMiniAISentinel:
             "btn_new_tab",
             "addr",
             "urlbar",
-            "btn_zoom_out",
-            "btn_zoom_in",
             "btn_js",
             "btn_nuke",
         ]
@@ -5750,8 +5746,6 @@ class Browser(NSObject):
         # ----------------------------
         # Right-side buttons
         # ----------------------------
-        self.btn_zoom_out = make_icon_btn("minus.magnifyingglass", "Zoom Out")
-        self.btn_zoom_in = make_icon_btn("plus.magnifyingglass", "Zoom In")
         self.btn_full = make_icon_btn(
             "arrow.up.left.and.arrow.down.right", "Fullscreen"
         )
@@ -5773,8 +5767,6 @@ class Browser(NSObject):
         )
 
         for b, sel in [
-            (self.btn_zoom_out, "actZoomOut:"),
-            (self.btn_zoom_in, "actZoomIn:"),
             (self.btn_full, "actFull:"),
             (self.btn_js, "actToggleJS:"),
             (self.btn_nuke, "actNuke:"),
@@ -5822,8 +5814,6 @@ class Browser(NSObject):
 
         # right cluster
         right_buttons = [
-            self.btn_zoom_out,
-            self.btn_zoom_in,
             self.btn_full,
             self.btn_js,
             self.btn_nuke,
@@ -7244,11 +7234,14 @@ class Browser(NSObject):
     def _install_key_monitor(self):
 
         def handler(evt):
+
             try:
+    
                 if evt.type() != 10:  # KeyDown
                     return evt
 
                 flags = evt.modifierFlags()
+
                 cmd = bool(flags & NSEventModifierFlagCommand)
                 shift = bool(flags & NSEventModifierFlagShift)
 
@@ -7261,73 +7254,97 @@ class Browser(NSObject):
                 # ----------------------------------
                 # ⌘ + ← / →  (Back / Forward)
                 # ----------------------------------
-                if key == 123:  # left arrow
+                if key == 123:
                     self.actBack_(None)
                     return None
 
-                if key == 124:  # right arrow
+                if key == 124:
                     self.actFwd_(None)
                     return None
 
                 # ----------------------------------
-                # ⌘ + Shift + L  (Threat Console)
+                # ⌘ + Shift + L
                 # ----------------------------------
                 if ch and ch.lower() == "l" and shift:
+
                     try:
                         self.openThreatReport_(None)
-                    except Exception:
-                        print("[Shortcut] Threat console not hooked")
+                    except Exception as e:
+                        print("[Shortcut] Threat console error:", e)
+
                     return None
 
                 # ----------------------------------
                 # ⌘ + T
                 # ----------------------------------
-                if ch == "t":
+                if ch and ch.lower() == "t":
                     self.actNewTab_(None)
                     return None
 
+                # ----------------------------------
                 # ⌘ + W
-                if ch == "w":
+                # ----------------------------------
+                if ch and ch.lower() == "w":
                     self.actCloseTab_(None)
                     return None
 
+                # ----------------------------------
                 # ⌘ + R
-                if ch == "r":
+                # ----------------------------------
+                if ch and ch.lower() == "r":
                     self.actReload_(None)
                     return None
 
+                # ----------------------------------
                 # ⌘ + L
+                # ----------------------------------
                 if ch and ch.lower() == "l" and not shift:
-                    self.window.makeFirstResponder_(self.urlbar)
+
+                    try:
+                        self.window.makeFirstResponder_(self.addr)
+                    except Exception:
+                        pass
+
                     return None
 
-                # ⌘ + S → Snapshot
-                if ch == "s":
+                # ----------------------------------
+                # ⌘ + S
+                # ----------------------------------
+                if ch and ch.lower() == "s":
                     self.actSnapshot_(None)
                     return None
 
-                # ⌘ + Shift + X → Exit
-                if ch.lower() == "x" and shift:
+                # ----------------------------------
+                # ⇧⌘ + X
+                # ----------------------------------
+                if ch and ch.lower() == "x" and shift:
                     NSApp().terminate_(None)
                     return None
 
-                # ⌘ + - → Zoom Out
+                # ----------------------------------
+                # ⌘ + -
+                # ----------------------------------
                 if ch == "-":
                     self.actZoomOut_(None)
                     return None
 
-                # ⌘ + = → Zoom In
+                # ----------------------------------
+                # ⌘ + =
+                # ----------------------------------
                 if ch == "=":
                     self.actZoomIn_(None)
                     return None
-
+                    
             except Exception as e:
                 print("Key handler error:", e)
-
+            
             return evt
 
-        NSEvent.addLocalMonitorForEventsMatchingMask_handler_(1 << 10, handler)
-
+        NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            1 << 10,
+            handler
+        )
+                        
     def safe_shutdown(self):
 
         if hasattr(self, "window"):
