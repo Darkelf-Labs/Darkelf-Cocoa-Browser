@@ -1,7 +1,7 @@
 # 🧿 Darkelf Cocoa Browser 4.4.1 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
 
 <p align="center">
-  <img src="https://github.com/Darkelf2024/Darkelf-Cocoa-Browser/blob/main/Darkelf%20images/darkelf_hm_new.png"
+  <img src=""
        alt="Darkelf Cocoa Browser"
        width="900">
 </p>
