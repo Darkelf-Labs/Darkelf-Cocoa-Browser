@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v4.3.8 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v4.4.0 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -7429,15 +7429,21 @@ class Browser(NSObject):
             # ------------------------------------------
             # destroy broken/stale panel
             # ------------------------------------------
-            if hasattr(self, "_findPanel"):
+            panel_ref = getattr(self, "_findPanel", None)
+
+            if panel_ref is not None:
 
                 try:
-                    self._findPanel.removeFromSuperview()
+
+                    # avoid redundant Cocoa detach
+                    if panel_ref.superview():
+                        panel_ref.removeFromSuperview()
+
                 except Exception as e:
 
                     print("[FindBar Cleanup Error]", e)
-                    
-                self._findPanel = None
+
+            self._findPanel = None
 
             # ------------------------------------------
             # floating overlay
@@ -7559,14 +7565,6 @@ class Browser(NSObject):
             # ------------------------------------------
             content = self.window.contentView()
 
-            content.addSubview_positioned_relativeTo_(
-                panel,
-                1,
-                None
-            )
-
-            # FORCE FRONT
-            panel.removeFromSuperview()
             content.addSubview_positioned_relativeTo_(
                 panel,
                 1,
