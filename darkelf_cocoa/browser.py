@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v4.3.7 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v4.3.8 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -128,6 +128,7 @@ from Cocoa import (
 
 from WebKit import (
     WKWebView,
+    WebView,
     WKWebViewConfiguration,
     WKProcessPool,
     WKUserContentController,
@@ -157,6 +158,7 @@ from AppKit import (
     NSAnimationContext,
     NSViewWidthSizable,
     NSTextView,
+    NSScrollView,
     NSViewMinYMargin,
     NSViewMaxXMargin,
     NSViewMaxYMargin,
@@ -172,6 +174,7 @@ from AppKit import (
     NSBitmapImageRep,
     NSMutableParagraphStyle,
     NSFocusRingTypeNone,
+    NSEventModifierFlagControl,
 )
 
 import time
@@ -2211,7 +2214,7 @@ class ContentRuleManager:
         )
 
         # --------------------------------------------------
-        # CNN FIX (REMOVE EMPTY BOXES 🔥)
+        # CNN FIX (SAFE — NO EMPTY GHOST BOXES)
         # --------------------------------------------------
         rules.append(
             {
@@ -2219,23 +2222,30 @@ class ContentRuleManager:
                 "action": {
                     "type": "css-display-none",
                     "selector": """
-                    .ad,
-                    .ads,
-                    .ad-slot,
-                    .ad-container,
-                    .banner-ad,
-                    .container__ads,
-                    .zn-body__ad,
-                    .pg-rail__ad,
-                    .l-container--ads,
-                    .ad-placeholder,
-                    [id*='ad-slot'],
-                    [class*='ad-slot'],
+                        /* REAL ad units only */
+                        iframe[src*='doubleclick'],
+                        iframe[src*='googlesyndication'],
 
-                    /* 🔥 kill empty leftovers */
-                    div:empty[class*="ad"],
-                    div:empty[id*="ad"]
-                """,
+                        .ad-slot-header,
+                        .ad-slot-banner,
+                        .ad-slot-wallpaper,
+                        .ad-container--desktop,
+                        .ad-container--mobile,
+                        .banner-ad-container,
+                        .sponsored-container,
+
+                        [data-ad],
+                        [data-ad-container],
+                        [data-slot-type='ad'],
+
+                        /* CNN video ads */
+                        .video__end-slate-ad,
+                        .video-ads,
+
+                        /* remove EMPTY placeholders safely */
+                        .container__ads:empty,
+                        .ad-placeholder:empty
+                    """,
                 },
             }
         )
@@ -2549,7 +2559,25 @@ class _NavDelegate(NSObject):
 
         except Exception as e:
             print("[NavDelegate] didFinish error:", e)
+            
+            # ------------------------------------------
+            # restore floating findbar after navigation
+            # ------------------------------------------
+            try:
 
+                if hasattr(browser, "_findPanel") and browser._findPanel:
+
+                    browser._findPanel.removeFromSuperview()
+
+                    browser.window.contentView().addSubview_positioned_relativeTo_(
+                        browser._findPanel,
+                        1,
+                        None
+                    )
+
+            except Exception as e:
+                print("[FindBar Restore Error]", e)
+        
     # -------------------------------------------------
     # JS Bridge
     # -------------------------------------------------
@@ -5746,9 +5774,15 @@ class Browser(NSObject):
         # ----------------------------
         # Right-side buttons
         # ----------------------------
-        self.btn_full = make_icon_btn(
-            "arrow.up.left.and.arrow.down.right", "Fullscreen"
+
+        self.btn_hotkeys = make_icon_btn(
+            "keyboard",
+            "Darkelf Command Center"
         )
+
+        self.btn_hotkeys.setTarget_(self)
+        self.btn_hotkeys.setAction_("openDarkelfCommandCenter:")
+        
         self.btn_js = make_icon_btn(
             "bolt.fill" if self.js_enabled else "bolt.slash.fill",
             f"JavaScript: {'ON' if self.js_enabled else 'OFF'}",
@@ -5767,7 +5801,7 @@ class Browser(NSObject):
         )
 
         for b, sel in [
-            (self.btn_full, "actFull:"),
+            (self.btn_hotkeys, "openDarkelfCommandCenter:"),
             (self.btn_js, "actToggleJS:"),
             (self.btn_nuke, "actNuke:"),
             (self.btn_mini_ai, "openThreatReport:"),
@@ -5775,7 +5809,7 @@ class Browser(NSObject):
             b.setTarget_(self)
             b.setAction_(sel)
             self.toolbar_container.addSubview_(b)
-
+            
         # layout pass
         self._layout_toolbar()
         return self.toolbar_container
@@ -5814,7 +5848,7 @@ class Browser(NSObject):
 
         # right cluster
         right_buttons = [
-            self.btn_full,
+            self.btn_hotkeys,
             self.btn_js,
             self.btn_nuke,
             self.btn_mini_ai,
@@ -7236,115 +7270,1172 @@ class Browser(NSObject):
         def handler(evt):
 
             try:
-    
-                if evt.type() != 10:  # KeyDown
+
+                if evt.type() != 10:
                     return evt
 
                 flags = evt.modifierFlags()
 
                 cmd = bool(flags & NSEventModifierFlagCommand)
                 shift = bool(flags & NSEventModifierFlagShift)
+                ctrl = bool(flags & NSEventModifierFlagControl)
 
                 if not cmd:
                     return evt
 
                 ch = evt.charactersIgnoringModifiers()
+                raw = evt.characters()
+
+                if ch:
+                    ch = ch.lower()
+
                 key = evt.keyCode()
 
                 # ----------------------------------
-                # ⌘ + ← / →  (Back / Forward)
+                # ⌘ ←
                 # ----------------------------------
                 if key == 123:
                     self.actBack_(None)
                     return None
 
+                # ----------------------------------
+                # ⌘ →
+                # ----------------------------------
                 if key == 124:
                     self.actFwd_(None)
                     return None
-
+                    
                 # ----------------------------------
-                # ⌘ + Shift + L
+                # ⌘F FIND BAR
                 # ----------------------------------
-                if ch and ch.lower() == "l" and shift:
+                if ch == "f" and not shift and not ctrl:
 
                     try:
-                        self.openThreatReport_(None)
+
+                        NSOperationQueue.mainQueue().addOperationWithBlock_(
+                            lambda: self.showFindBar()
+                        )
+
                     except Exception as e:
-                        print("[Shortcut] Threat console error:", e)
+                        print("[FindBar Shortcut Error]", e)
+
+                    return None
+                    
+                # ----------------------------------
+                # ⌃⌘F FULLSCREEN
+                # ----------------------------------
+                if ch == "f" and ctrl:
+
+                    try:
+                        self.window.toggleFullScreen_(None)
+                    except Exception as e:
+                        print("[Fullscreen Error]", e)
 
                     return None
 
                 # ----------------------------------
-                # ⌘ + T
+                # ⇧⌘L THREAT
                 # ----------------------------------
-                if ch and ch.lower() == "t":
+                if ch == "l" and shift:
+
+
+                    self.openThreatReport_(None)
+                    return None
+
+                # ----------------------------------
+                # ⌘L ADDRESS BAR
+                # ----------------------------------
+                if ch == "l" and not shift:
+
+                    self.window.makeFirstResponder_(self.addr)
+                    return None
+
+                # ----------------------------------
+                # ⌘T
+                # ----------------------------------
+                if ch == "t":
                     self.actNewTab_(None)
                     return None
 
                 # ----------------------------------
-                # ⌘ + W
+                # ⌘W
                 # ----------------------------------
-                if ch and ch.lower() == "w":
+                if ch == "w":
                     self.actCloseTab_(None)
                     return None
 
                 # ----------------------------------
-                # ⌘ + R
+                # ⌘R
                 # ----------------------------------
-                if ch and ch.lower() == "r":
+                if ch == "r":
                     self.actReload_(None)
                     return None
 
                 # ----------------------------------
-                # ⌘ + L
+                # ⌘S
                 # ----------------------------------
-                if ch and ch.lower() == "l" and not shift:
-
-                    try:
-                        self.window.makeFirstResponder_(self.addr)
-                    except Exception:
-                        pass
-
-                    return None
-
-                # ----------------------------------
-                # ⌘ + S
-                # ----------------------------------
-                if ch and ch.lower() == "s":
+                if ch == "s":
                     self.actSnapshot_(None)
                     return None
 
                 # ----------------------------------
-                # ⇧⌘ + X
+                # ⇧⌘X
                 # ----------------------------------
-                if ch and ch.lower() == "x" and shift:
+                if ch == "x" and shift:
+
                     NSApp().terminate_(None)
                     return None
 
                 # ----------------------------------
-                # ⌘ + -
+                # ⌘=
                 # ----------------------------------
-                if ch == "-":
+                if raw == "=":
+                    self.actZoomIn_(None)
+                    return None
+
+                # ----------------------------------
+                # ⌘-
+                # ----------------------------------
+                if raw == "-":
                     self.actZoomOut_(None)
                     return None
 
                 # ----------------------------------
-                # ⌘ + =
+                # ⇧⌘/
+                # macOS returns "/" not "?"
                 # ----------------------------------
-                if ch == "=":
-                    self.actZoomIn_(None)
+                # ⇧⌘/
+                if raw == "/" and shift:
+
+                    self.openDarkelfCommandCenter_(None)
                     return None
-                    
+
             except Exception as e:
-                print("Key handler error:", e)
-            
+                print("[Hotkey Error]", e)
+
             return evt
 
-        NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+        # IMPORTANT:
+        # RETAIN monitor or GC kills shortcuts
+        self._keyMonitor = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
             1 << 10,
             handler
         )
+        
+    def showFindBar(self):
+
+        try:
+
+            # ------------------------------------------
+            # destroy broken/stale panel
+            # ------------------------------------------
+            if hasattr(self, "_findPanel"):
+
+                try:
+                    self._findPanel.removeFromSuperview()
+                except Exception as e:
+
+                    print("[FindBar Cleanup Error]", e)
+                    
+                self._findPanel = None
+
+            # ------------------------------------------
+            # floating overlay
+            # ------------------------------------------
+            panel = NSView.alloc().initWithFrame_(
+                NSMakeRect(28, 28, 430, 62)
+            )
+
+            panel.setAutoresizingMask_(
+                NSViewMaxXMargin | NSViewMaxYMargin
+            )
+
+            panel.setWantsLayer_(True)
+
+            layer = panel.layer()
+
+            layer.setCornerRadius_(14)
+
+            layer.setBackgroundColor_(
+                NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    0.08, 0.09, 0.11, 0.98
+                ).CGColor()
+            )
+
+            layer.setBorderWidth_(1.0)
+
+            layer.setBorderColor_(
+                NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    0.18, 0.20, 0.24, 1
+                ).CGColor()
+            )
+
+            # ------------------------------------------
+            # search field
+            # ------------------------------------------
+            field = NSSearchField.alloc().initWithFrame_(
+                NSMakeRect(16, 16, 370, 30)
+            )
+
+            field.setPlaceholderString_("Find in page")
+
+            field.setFont_(NSFont.systemFontOfSize_(14))
+
+            # Native macOS rendering
+            field.setFocusRingType_(NSFocusRingTypeNone)
+
+            field.setBordered_(True)
+            field.setBezeled_(True)
+
+            # Better text rendering
+            field.cell().setUsesSingleLineMode_(True)
+
+            # Dark mode text
+            try:
+
+                field.setTextColor_(NSColor.whiteColor())
+
+            except Exception as e:
+
+                print("[FindBar TextColor Error]", e)
+
+            # IMPORTANT:
+            # DO NOT layer-style NSSearchField
+            # Cocoa breaks rendering if you do
+
+            try:
+
+                field.setWantsLayer_(False)
+
+            except Exception as e:
+
+                print("[FindBar Layer Error]", e)
+
+            panel.addSubview_(field)
+            
+            # ------------------------------------------
+            # close button
+            # ------------------------------------------
+
+            close = NSButton.alloc().initWithFrame_(
+                NSMakeRect(392, 18, 24, 24)
+            )
+
+            close.setBordered_(False)
+
+            close.setTitle_("✕")
+
+            close.setBezelStyle_(0)
+
+            close.setFont_(
+                NSFont.systemFontOfSize_weight_(13, 0.7)
+            )
+
+            close.setContentTintColor_(
+                NSColor.systemRedColor()
+            )
+
+            close.setTarget_(self)
+
+            close.setAction_("hideFindBar:")
+
+            close.setWantsLayer_(True)
+
+            close.layer().setCornerRadius_(8)
+
+            close.layer().setBackgroundColor_(
+                NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    0.12,
+                    0.14,
+                    0.17,
+                    1
+                ).CGColor()
+            )
+
+            panel.addSubview_(close)
+
+            # ------------------------------------------
+            # attach ABOVE EVERYTHING
+            # ------------------------------------------
+            content = self.window.contentView()
+
+            content.addSubview_positioned_relativeTo_(
+                panel,
+                1,
+                None
+            )
+
+            # FORCE FRONT
+            panel.removeFromSuperview()
+            content.addSubview_positioned_relativeTo_(
+                panel,
+                1,
+                None
+            )
+
+            self._findPanel = panel
+            self._findField = field
+
+            # ------------------------------------------
+            # live find
+            # ------------------------------------------
+            field.setTarget_(self)
+            field.setAction_("performPageFind:")
+
+            self.window.makeFirstResponder_(field)
+
+        except Exception as e:
+            print("[FindBar Error]", e)
+            
+    def hideFindBar_(self, sender):
+
+        try:
+
+            if hasattr(self, "_findPanel") and self._findPanel:
+
+                self._findPanel.removeFromSuperview()
+
+                self._findPanel = None
+                self._findField = None
+    
+        except Exception as e:
+            print("[FindBar Hide Error]", e)
+        
+    def performPageFind_(self, sender):
+
+        try:
+
+            text = self._findField.stringValue()
+
+            if not text:
+                return
+
+            tab = self.tabs[self.active]
+
+            js = f"""
+            window.find({json.dumps(text)}, false, false, true, false, false, false);
+            """
+
+            tab.view.evaluateJavaScript_completionHandler_(
+                js,
+                None
+            )
+
+        except Exception as e:
+            print("[Find Error]", e)
+            
+    def setupHotkeys(self):
+
+        def handler(event):
+
+            chars = event.charactersIgnoringModifiers()
+
+            mods = event.modifierFlags()
+
+            cmd = mods & NSEventModifierFlagCommand
+            shift = mods & NSEventModifierFlagShift
+
+            # ⇧⌘/
+            if cmd and shift and chars == "/":
+
+                self.openDarkelfCommandCenter_(None)
+
+                return None
+
+            return event
+
+        NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            10,   # keyDown
+            handler
+        )
+        
+    def openDarkelfCommandCenter_(self, sender):
+
+        try:
+
+            print("[Darkelf] Opening Command Center")
+
+            # ------------------------------------------------
+            # HOTKEY DATA
+            # ------------------------------------------------
+
+            hotkeys = [
+                ("⌘T", "New Tab"),
+                ("⌘W", "Close Tab"),
+                ("⌘R", "Reload"),
+                ("⌘L", "Address Bar"),
+                ("⌘F", "Find In Page"),
+                ("⇧⌘F", "Fullscreen"),
+                ("⇧⌘L", "Threat Console"),
+                ("⇧⌘/", "Hotkey Help"),
+                ("⌘←", "Back"),
+                ("⌘→", "Forward"),
+                ("⌘+", "Zoom In"),
+                ("⌘-", "Zoom Out"),
+                ("⇧⌘X", "Exit"),
+            ]
+
+            rows = ""
+
+            for key, desc in hotkeys:
+
+                rows += f"""
+                <div class="hotkey-row">
+                    <div class="key">{key}</div>
+                    <div class="desc">{desc}</div>
+                </div>
+                """
+
+            # ------------------------------------------------
+            # HTML
+            # ------------------------------------------------
+
+            html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <meta charset="utf-8">
+            
+            <style>
+
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+
+            body {{
+
+                background:
+                    radial-gradient(circle at top,
+                    #102018 0%,
+                    #050607 40%,
+                    #010101 100%);
+
+                color: white;
+
+                font-family:
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    sans-serif;
+
+                overflow-x: hidden;
+
+                padding: 40px;
+            }}
+
+            body::before {{
+
+                content: "";
+
+                position: fixed;
+
+                inset: 0;
+
+                background-image:
+                    linear-gradient(rgba(0,255,120,0.04) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0,255,120,0.04) 1px, transparent 1px);
+
+                background-size: 40px 40px;
+
+                pointer-events: none;
+            }}
+
+            .hero {{
+
+                margin-bottom: 35px;
+            }}
+
+            .title {{
+
+                font-size: 72px;
+                font-weight: 900;
+
+                letter-spacing: 8px;
+
+                color: #00ff88;
+
+                text-shadow:
+                    0 0 10px rgba(0,255,120,0.7),
+                    0 0 35px rgba(0,255,120,0.45),
+                    0 0 90px rgba(0,255,120,0.2);
+
+                margin-bottom: 12px;
+            }}
+
+            .subtitle {{
+
+                color: #7d8b84;
+
+                font-size: 14px;
+
+                letter-spacing: 4px;
+
+                text-transform: uppercase;
+            }}
+
+            .layout {{
+
+                display: grid;
+
+                grid-template-columns: 1.3fr 1fr;
+
+                gap: 30px;
+            }}
+
+            .panel {{
+
+                position: relative;
+
+                background:
+                    linear-gradient(
+                        180deg,
+                        rgba(14,18,20,0.96),
+                        rgba(6,8,9,0.96)
+                    );
+
+                border-radius: 24px;
+
+                padding: 30px;
+
+                border:
+                    1px solid rgba(0,255,120,0.18);
+
+                box-shadow:
+                    0 0 40px rgba(0,255,120,0.08),
+                    inset 0 0 25px rgba(0,255,120,0.03);
+
+                overflow: hidden;
+            }}
+
+            .panel::before {{
+
+                content: "";
+
+                position: absolute;
+
+                top: 0;
+                left: 0;
+                right: 0;
+
+                height: 2px;
+
+                background:
+                    linear-gradient(
+                        90deg,
+                        transparent,
+                        #00ff88,
+                        transparent
+                    );
+            }}
+
+            .section-title {{
+
+                color: #00ff88;
+
+                font-size: 22px;
+
+                margin-bottom: 24px;
+
+                font-weight: 800;
+
+                letter-spacing: 2px;
+            }}
+
+            .hotkey-row {{
+
+                display: flex;
+
+                align-items: center;
+
+                margin-bottom: 14px;
+
+                padding: 16px;
+
+                border-radius: 16px;
+
+                background:
+                    rgba(255,255,255,0.03);
+
+                border:
+                    1px solid rgba(255,255,255,0.04);
+
+                transition: all 0.2s ease;
+            }}
+
+            .hotkey-row:hover {{
+
+                transform:
+                    translateX(6px)
+                    scale(1.01);
+
+                background:
+                    rgba(0,255,120,0.08);
+
+                border:
+                    1px solid rgba(0,255,120,0.25);
+
+                box-shadow:
+                    0 0 18px rgba(0,255,120,0.15);
+            }}
+
+            .key {{
+
+                width: 120px;
+
+                text-align: center;
+
+                padding: 10px;
+
+                border-radius: 12px;
+
+                font-family: Menlo, monospace;
+
+                color: #00ff88;
+
+                border:
+                    1px solid rgba(0,255,120,0.35);
+
+                background:
+                    rgba(0,255,120,0.08);
+
+                font-weight: bold;
+
+                box-shadow:
+                    inset 0 0 12px rgba(0,255,120,0.08);
+            }}
+
+            .desc {{
+
+                margin-left: 18px;
+
+                color: #dbe4de;
+
+                font-size: 15px;
+            }}
+
+            .about {{
+
+                line-height: 1.9;
+
+                color: #c7d0ca;
+
+                font-size: 15px;
+            }}
+
+            .about strong {{
+
+                color: #00ff88;
+            }}
+
+            .highlight-grid {{
+
+                display: grid;
+
+                grid-template-columns: 1fr 1fr;
+
+                gap: 16px;
+
+                margin-top: 26px;
+            }}
+
+            .highlight {{
+
+                padding: 18px;
+
+                border-radius: 16px;
+
+                background:
+                    rgba(255,255,255,0.03);
+
+                border:
+                    1px solid rgba(0,255,120,0.08);
+
+                transition: 0.2s;
+            }}
+
+            .highlight:hover {{
+
+                background:
+                    rgba(0,255,120,0.08);
+
+                transform: translateY(-3px);
+            }}
+
+            .highlight-title {{
+
+                color: #00ff88;
+
+                font-size: 13px;
+
+                letter-spacing: 1px;
+
+                margin-bottom: 10px;
+
+                font-weight: 700;
+            }}
+
+            .highlight-text {{
+
+                color: #d6dfd9;
+
+                font-size: 14px;
+
+                line-height: 1.5;
+            }}
+            
+            .dashboard {{
+
+                margin-top: 30px;
+
+                display: flex;
+
+                flex-direction: column;
+
+                gap: 18px;
+            }}
+
+            .dash-card {{
+
+                background:
+                    rgba(255,255,255,0.03);
+
+                border:
+                    1px solid rgba(0,255,120,0.10);
+
+                border-radius: 18px;
+
+                padding: 20px;
+
+                box-shadow:
+                    inset 0 0 18px rgba(0,255,120,0.03);
+            }}
+
+            .dash-title {{
+
+                color: #00ff88;
+
+                font-size: 14px;
+
+                letter-spacing: 2px;
+
+                margin-bottom: 16px;
+
+                font-weight: 800;
+            }}
+
+            .status-grid {{
+
+                display: flex;
+
+                flex-wrap: wrap;
+
+                gap: 10px;
+            }}
+
+            .status-pill {{
+
+                padding: 10px 14px;
+
+                border-radius: 999px;
+
+                background:
+                    rgba(0,255,120,0.08);
+
+                border:
+                    1px solid rgba(0,255,120,0.18);
+
+                color: #00ff88;
+
+                font-size: 12px;
+
+                font-weight: 700;
+
+                letter-spacing: 1px;
+            }}
+
+            .status-pill.warning {{
+
+                color: #ffcc66;
+
+                border:
+                    1px solid rgba(255,200,80,0.25);
+
+                background:
+                    rgba(255,200,80,0.08);
+            }}
+
+            .feature {{
+
+                color: #d9e2dc;
+
+                padding: 8px 0;
+
+                border-bottom:
+                    1px solid rgba(255,255,255,0.04);
+            }}
+
+            .terminal {{
+
+                background:
+                    linear-gradient(
+                        180deg,
+                        rgba(0,0,0,0.55),
+                        rgba(0,0,0,0.82)
+                    );
+            }}
+
+            .terminal-line {{
+
+                font-family: Menlo, monospace;
+
+                color: #7d8b84;
+
+                margin-bottom: 10px;
+
+                font-size: 13px;
+            }}
+
+            .terminal-line.green {{
+
+                color: #00ff88;
+
+                text-shadow:
+                    0 0 8px rgba(0,255,120,0.4);
+            }}
+            
+            .statusbar {{
+
+                margin-top: 28px;
+
+                display: flex;
+
+                gap: 18px;
+
+                flex-wrap: wrap;
+            }}
+
+            .status {{
+
+                padding: 10px 16px;
+
+                border-radius: 999px;
+
+                background:
+                    rgba(0,255,120,0.08);
+
+                border:
+                    1px solid rgba(0,255,120,0.18);
+
+                color: #00ff88;
+
+                font-size: 12px;
+
+                letter-spacing: 1px;
+
+                font-weight: 700;
+            }}
+
+            .footer {{
+
+                margin-top: 30px;
+
+                color: #5f6963;
+
+                font-size: 12px;
+
+                letter-spacing: 2px;
+            }}
+
+            </style>
+            </head>
+
+            <body>
+
+                <div class="hero">
+
+                    <div class="title">
+                        DARKELF
+                    </div>
+
+                    <div class="subtitle">
+                        CYBER TACTICAL COMMAND CENTER
+                    </div>
+
+                </div>
+
+                <div class="layout">
+
+                    <div class="panel">
+
+                        <div class="section-title">
+                            HOTKEY MATRIX
+                        </div>
+
+                        {rows}
+
+                    </div>
+
+                    <div class="panel">
+
+                        <div class="section-title">
+                            ABOUT DARKELF
+                        </div>
+
+                        <div class="about">
+
+                            <strong>Darkelf</strong> is a next-generation
+                            tactical AI browser engineered for privacy,
+                            immersive cyber navigation, and high-speed workflows.
+
+                            <br><br>
+
+                            Built with a futuristic hacker-inspired interface,
+                            Darkelf combines ephemeral browsing, stealth-focused
+                            WebKit isolation, AI threat monitoring,
+                            and command-center aesthetics into one environment.
+
+                            <br><br>
+
+                            Designed for researchers, operators, engineers,
+                            investigators, cybersecurity professionals,
+                            and advanced users who demand full tactical control.
+
+                        </div>
+
+                        <div class="highlight-grid">
+
+                            <div class="highlight">
+
+                                <div class="highlight-title">
+                                    EPHEMERAL MEMORY
+                                </div>
+
+                                <div class="highlight-text">
+                                    Zero-persistence browsing with isolated
+                                    memory-only sessions.
+                                </div>
+
+                            </div>
+
+                            <div class="highlight">
+
+                                <div class="highlight-title">
+                                    DARKELF MINI AI
+                                </div>
+
+                                <div class="highlight-text">
+                                    Real-time threat analysis and anomaly detection
+                                    engine integrated directly into the browser.
+                                </div>
+
+                            </div>
+
+                            <div class="highlight">
+
+                                <div class="highlight-title">
+                                    CYBERPUNK UI
+                                </div>
+
+                                <div class="highlight-text">
+                                    Tactical neon-green interface designed
+                                    for immersive hacker workflows.
+                                </div>
+
+                            </div>
+
+                            <div class="highlight">
+
+                                <div class="highlight-title">
+                                    FIRST PARTY ISOLATION
+                                </div>
+
+                                <div class="highlight-text">
+                                    Advanced tab and domain isolation
+                                    architecture for maximum privacy.
+                                </div>
+
+                            </div>
+
+                        </div>
                         
+                        <div class="dashboard">
+
+                <div class="dash-card">
+
+                    <div class="dash-title">
+                        SYSTEM STATUS
+                    </div>
+
+                    <div class="status-grid">
+
+                        <div class="status-pill">
+                            AI CORE ONLINE
+                        </div>
+
+                        <div class="status-pill">
+                            PQ ACTIVE
+                        </div>
+
+                        <div class="status-pill">
+                            MEMORY EPHEMERAL
+                        </div>
+
+                        <div class="status-pill">
+                            TRACKERS BLOCKED
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="dash-card">
+
+                    <div class="dash-title">
+                        DARKELF HIGHLIGHTS
+                    </div>
+
+                    <div class="feature">
+                        ▸ Real-time Threat Analysis
+                    </div>
+
+                    <div class="feature">
+                        ▸ WebKit Process Isolation
+                    </div>
+
+                    <div class="feature">
+                        ▸ Fingerprint Spoofing Defense
+                    </div>
+
+                    <div class="feature">
+                        ▸ AI-Based Tracker Detection
+                    </div>
+
+                    <div class="feature">
+                        ▸ Ephemeral Memory Sessions
+                    </div>
+
+                </div>
+
+                <div class="dash-card terminal">
+
+                    <div class="dash-title">
+                        LIVE TERMINAL
+                    </div>
+
+                    <div class="terminal-line">
+                        [ OK ] AI Sentinel initialized
+                    </div>
+
+                    <div class="terminal-line">
+                        [ OK ] PQ Integrity active
+                    </div>
+
+                    <div class="terminal-line">
+                        [ OK ] WebKit sandbox isolated
+                    </div>
+
+                    <div class="terminal-line green">
+                        [ LIVE ] Threat monitor operational
+                    </div>
+
+                </div>
+
+            </div>
+                        <div class="statusbar">
+
+                            <div class="status">
+                                SYSTEM ONLINE
+                            </div>
+
+                            <div class="status">
+                                AI ACTIVE
+                            </div>
+
+                            <div class="status">
+                                PQ ENABLED
+                            </div>
+
+                        </div>
+
+                        <div class="footer">
+                            DARKELF COMMAND CENTER v4.3.8
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </body>
+            </html>
+            """
+
+            # ----------------------------------------
+            # CREATE REAL INTERNAL TAB
+            # ----------------------------------------
+
+            container_nonce = secrets.token_hex(4)
+
+            pq_seed = hashlib.sha256(os.urandom(32)).digest()
+
+            tab = Tab(
+                view=None,
+                data_store=None,
+                url="darkelf://command",
+                host="Darkelf Command Center",
+                canvas_seed=None,
+                container_nonce=container_nonce,
+                tab_uid=self._tab_uid_counter + 1,
+            )
+
+            tab._pq_seed = pq_seed
+            tab._pq_counter = 0
+            tab._nonce = secrets.token_hex(8)
+
+            self._tab_uid_counter += 1
+
+            # ----------------------------------------
+            # CREATE WEBVIEW
+            # ----------------------------------------
+
+            wk, store = self._new_wk(container_nonce, pq_seed, tab)
+
+            tab.view = wk
+            tab.data_store = store
+
+            wk.setNavigationDelegate_(self._nav_delegate)
+
+            # ----------------------------------------
+            # MOUNT TAB
+            # ----------------------------------------
+
+            self._mount_webview(wk)
+
+            self.tabs.append(tab)
+
+            self.active = len(self.tabs) - 1
+
+            # ----------------------------------------
+            # LOAD HTML
+            # ----------------------------------------
+
+            wk.loadHTMLString_baseURL_(
+                html,
+                NSURL.URLWithString_("darkelf://command")
+            )
+
+            # ----------------------------------------
+            # UI UPDATE
+            # ----------------------------------------
+
+            self._update_tab_buttons()
+
+            self._sync_addr()
+
+        except Exception as e:
+
+            print("[Darkelf Command Center Error]", e)
+            
     def safe_shutdown(self):
 
         if hasattr(self, "window"):
