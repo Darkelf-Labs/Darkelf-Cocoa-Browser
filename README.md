@@ -1,11 +1,5 @@
 # 🧿 Darkelf Cocoa Browser 4.4.3 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
 
-<p align="center">
-  <img src="https://github.com/Darkelf2024/Darkelf-Cocoa-Browser/blob/main/Darkelf%20images/de_hm_pg.png"
-       alt="Darkelf Cocoa Browser"
-       width="900">
-</p>
-
 ### Ephemeral, Privacy‑First macOS Browser (PyObjC + WebKit)
 
 A hardened, **memory‑only** macOS browser designed for **zero persistence**, **tracker resistance**, **real‑time threat detection**, and **post‑quantum integrity awareness** — installable via `pip` with a full native GUI.
