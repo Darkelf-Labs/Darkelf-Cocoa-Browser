@@ -1,4 +1,4 @@
-# 🧿 Darkelf Cocoa Browser 4.4.3 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
+# 🧿 Darkelf Cocoa Browser 4.4.4 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
 
 ### Ephemeral, Privacy‑First macOS Browser (PyObjC + WebKit)
 
