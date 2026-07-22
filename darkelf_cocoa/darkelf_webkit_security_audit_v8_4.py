@@ -356,9 +356,6 @@ def write_sarif(results, output_file):
 
         for severity in (
             "HIGH",
-            "MEDIUM",
-            "INFO",
-            "GOOD",
         ):
 
             for line, message, _ in file["findings"][severity]:
