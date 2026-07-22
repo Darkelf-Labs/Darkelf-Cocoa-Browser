@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Enhanced WebKit / PyObjC Security Auditor v8.3
+Darkelf Enhanced WebKit / PyObjC Security Auditor v8.4
 - Syntax-fixed
 - Recursive project scanning
 """
