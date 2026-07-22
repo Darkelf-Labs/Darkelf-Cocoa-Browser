@@ -27,7 +27,7 @@ jobs:
 
       - name: Run Darkelf WebKit Security Audit
         run: |
-          python webkit_audit_pro_v8_4.py darkelf_cocoa \
+          python darkelf_webkit_security_audit_v8_4.py darkelf_cocoa \
             --sarif results.sarif
 
       - name: Upload SARIF to GitHub Code Scanning
