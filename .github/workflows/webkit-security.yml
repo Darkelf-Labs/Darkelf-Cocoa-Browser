@@ -1,0 +1,37 @@
+name: Darkelf WebKit Security Audit
+
+on:
+  push:
+    branches: [main]
+
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  darkelf-webkit-audit:
+    name: Darkelf WebKit Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run Darkelf WebKit Security Audit
+        run: |
+          python webkit_audit_pro_v8_4.py darkelf_cocoa \
+            --sarif results.sarif
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
