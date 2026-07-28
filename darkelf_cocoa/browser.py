@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v4.4.4 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v7.0.4 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -62,6 +62,7 @@
 # Authored by Dr. Kevin Moore (2025).
 
 import os
+import time
 import sys, re, json, threading
 from dataclasses import dataclass
 from typing import Dict, List, Set, Optional
@@ -75,6 +76,7 @@ from Quartz import CABasicAnimation
 from collections import deque
 from datetime import datetime
 from urllib.parse import urlparse, unquote, quote_plus
+import urllib.request
 from objc import ObjCPointerWarning
 import shutil
 import tldextract
@@ -88,9 +90,12 @@ from Foundation import (
     NSURL,
     NSURLRequest,
     NSMakeRect,
+    NSMakeSize,
     NSNotificationCenter,
     NSTimer,
     NSUserDefaults,
+    NSURLRequest,
+    NSMutableURLRequest,
     NSURLSession,
     NSURLSessionConfiguration,
     NSRegistrationDomain,
@@ -159,6 +164,8 @@ from AppKit import (
     NSAppearance,
     NSAnimationContext,
     NSImage,
+    NSImageLeft,
+    NSLeftTextAlignment,
     NSImageView,
     NSViewWidthSizable,
     NSTextView,
@@ -172,6 +179,8 @@ from AppKit import (
     NSEventModifierFlagShift,
     NSPopover,
     NSViewController,
+    NSMenu,
+    NSMenuItem,
     NSSavePanel,
     NSBackgroundColorAttributeName,
     NSForegroundColorAttributeName,
@@ -471,8 +480,8 @@ def darkelf_pq_chain(owner, url: str) -> bytes:
     # replay detection (NEW)
     # ----------------------------
     if chain in tab._pq_chain_seen:
-        if hasattr(owner, "miniAI"):
-            owner.miniAI.suspicious_hits += 2
+        if hasattr(owner, "mini_ai"):
+            owner.mini_ai.suspicious_hits += 2
 
     tab._pq_chain_seen.append(chain)
 
@@ -674,8 +683,8 @@ class DarkelfNetworkPolicy:
             meta["_pq_chain"] = chain[:16].hex()
 
             if chain in tab._pq_chain_seen:
-                if hasattr(self.browser, "miniAI"):
-                    self.browser.miniAI.suspicious_hits += 2
+                if hasattr(self.browser, "mini_ai"):
+                    self.browser.mini_ai.suspicious_hits += 2
                     decision = "degrade"
 
             tab._pq_chain_seen.append(chain)
@@ -710,8 +719,8 @@ class DarkelfNetworkPolicy:
         # ADAPTIVE ENFORCEMENT
         # ----------------------------
         try:
-            if hasattr(self.browser, "miniAI"):
-                stats = self.browser.miniAI._pq_stats()
+            if hasattr(self.browser, "mini_ai"):
+                stats = self.browser.mini_ai._pq_stats()
 
                 if stats["risk_level"] == "high":
                     decision = "isolate"
@@ -1991,52 +2000,6 @@ class DarkelfMiniAISentinel:
             self.browser.finish_lockdown_unlock()
 
     # --------------------------------------------------
-    # UI ACTIONS (via Browser)
-    # --------------------------------------------------
-    def _show_threat_report_ui(self):
-
-        if self._lockdown_ui_opened:
-            return
-
-        if not self.browser:
-            return
-
-        try:
-
-            report_idx = -1
-
-            for i, tab in enumerate(self.browser.tabs):
-                if getattr(tab, "url", "") == "darkelf://report":
-                    report_idx = i
-                    break
-
-            if report_idx >= 0:
-
-                tab = self.browser.tabs[report_idx]
-                html = self.browser._build_threat_report_html()
-
-                # tab.view.loadHTMLString_baseURL_(html, None)
-                tab.view.loadHTMLString_baseURL_(
-                    html, NSURL.URLWithString_("darkelf://report")
-                )
-
-                tab.url = "darkelf://report"
-                tab.host = "Darkelf MiniAI Console"
-
-                self.browser.active = report_idx
-                self.browser._update_tab_buttons()
-                self.browser._sync_addr()
-
-            else:
-
-                self.browser.openThreatReport_(None)
-
-        except Exception as e:
-            print("[MiniAI] threat report error:", e)
-
-        self._lockdown_ui_opened = True
-
-    # --------------------------------------------------
     # UI LOCK
     # --------------------------------------------------
     def _lock_browser_ui(self):
@@ -2097,8 +2060,498 @@ class ContentRuleManager:
     _rule_list = None
     _loaded = False
 
+    # --------------------------------------------------
+    # Versioning
+    # --------------------------------------------------
+    VERSION = "15.02"
+    IDENTIFIER = f"darkelf_rules_v{VERSION}"
+    
+    # Refresh filter subscriptions once per week.
+    # Downloads occur only if the local cache is older than this value.
+    CACHE_AGE_DAYS = 7
+
+    # --------------------------------------------------
+    # Cache
+    # --------------------------------------------------
+    CACHE_DIR = os.path.expanduser(
+        "~/.darkelf/filterlists"
+    )
+
+    # --------------------------------------------------
+    # Runtime Statistics
+    # --------------------------------------------------
+    _compile_count = 0
+    _rule_count = 0
+    _css_count = 0
+    _tracker_count = 0
+    
+    RULE_BUDGET = {
+        "easylist": 55000,
+        "antiadblock": 5000,
+    }
+    
+    # --------------------------------------------------
+    # Filter Subscriptions
+    # --------------------------------------------------
+    SUBSCRIPTIONS = {
+        "easylist": {
+            "enabled": True,
+            "filename": "easylist.txt",
+            "url": "https://easylist-downloads.adblockplus.org/easylist.txt",
+        },
+
+        "antiadblock": {
+            "enabled": True,
+            "filename": "antiadblockfilters.txt",
+            "url": "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt",
+        },
+    }
+    
+    @classmethod
+    def _ensure_cache(cls):
+        os.makedirs(cls.CACHE_DIR, exist_ok=True)
+        
+    @classmethod
+    def _subscription_path(cls, name):
+        info = cls.SUBSCRIPTIONS[name]
+        return os.path.join(cls.CACHE_DIR, info["filename"])
+        
+    @classmethod
+    def _subscriptions_needing_update(cls):
+        """
+        Returns a list of subscriptions that should be downloaded.
+        """
+
+        updates = []
+
+        now = time.time()
+
+        for name, info in cls.SUBSCRIPTIONS.items():
+
+            if not info.get("enabled", True):
+                continue
+
+            path = cls._subscription_path(name)
+
+            if not os.path.exists(path):
+                updates.append(name)
+                continue
+
+            age_days = (
+                now - os.path.getmtime(path)
+            ) / 86400.0
+
+            if age_days >= cls.CACHE_AGE_DAYS:
+                updates.append(name)
+
+        return updates
+        
+    @classmethod
+    def refresh_subscriptions(cls):
+
+        needed = cls._subscriptions_needing_update()
+
+        if not needed:
+            print("[Rules] Filter subscriptions are current.")
+            return
+
+        print(
+            f"[Rules] Updating {len(needed)} filter subscriptions..."
+        )
+
+        for name in needed:
+
+            try:
+                cls._download_subscription(name)
+
+            except Exception as e:
+                print(f"[Rules] {name}: {e}")
+                
+    @classmethod
+    def _download_subscription(cls, name, completion=None):
+
+        info = cls.SUBSCRIPTIONS[name]
+        path = cls._subscription_path(name)
+
+        print(f"[Rules] Downloading {name}...")
+
+        config = NSURLSessionConfiguration.ephemeralSessionConfiguration()
+
+        config.setRequestCachePolicy_(1)   # ReloadIgnoringLocalCacheData
+
+        session = NSURLSession.sessionWithConfiguration_(config)
+
+        url = NSURL.URLWithString_(info["url"])
+
+        request = NSMutableURLRequest.requestWithURL_(url)
+
+        request.setValue_forHTTPHeaderField_(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko)",
+            "User-Agent",
+        )
+
+        request.setValue_forHTTPHeaderField_(
+            "*/*",
+            "Accept",
+        )
+        
+        def _finished(data, response, error):
+
+            if error:
+                print(f"[Rules] {name}: {error}")
+                if completion:
+                    completion(False)
+                return
+
+            try:
+                with open(path, "wb") as f:
+                    f.write(bytes(data))
+
+                print(f"[Rules] Saved {name}")
+
+                if completion:
+                    completion(True)
+
+            except Exception as e:
+                print(e)
+                if completion:
+                    completion(False)
+
+        task = session.dataTaskWithRequest_completionHandler_(
+            request,
+            _finished,
+        )
+
+        task.resume()
+        
+    @classmethod
+    def _parse_subscription(cls, name):
+
+        path = cls._subscription_path(name)
+
+        if not os.path.exists(path):
+            print(f"[Rules] {name}: file not found")
+            return []
+
+        rules = []
+        total_lines = 0
+        parsed_lines = 0
+
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+
+            for line in f:
+
+                total_lines += 1
+
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                parsed = cls._parse_abp_line(line)
+
+                if parsed:
+                    parsed_lines += 1
+                    rules.extend(parsed)
+
+        print(
+            f"[Rules] {name}: "
+            f"{len(rules):,} WebKit rules "
+            f"from {parsed_lines:,}/{total_lines:,} lines"
+        )
+
+        return rules
+        
+    @classmethod
+    def _external_subscription_rules(cls):
+        cls._unsupported_rules = 0
+        
+        # --------------------------------------------------
+        # Fresh CSS dedupe each compile
+        # --------------------------------------------------
+        cls._css_seen = set()
+
+        all_rules = []
+        seen = set()
+
+        MAX_RULES = 60000
+
+        for name, info in cls.SUBSCRIPTIONS.items():
+
+            if not info.get("enabled", False):
+                continue
+
+            if len(all_rules) >= MAX_RULES:
+                break
+
+            try:
+
+                parsed = cls._parse_subscription(name)
+
+                budget = cls.RULE_BUDGET.get(name, MAX_RULES)
+
+                remaining = MAX_RULES - len(all_rules)
+
+                limit = min(budget, remaining)
+
+                imported = 0
+
+                for rule in parsed:
+
+                    if imported >= limit:
+                        break
+
+                    key = json.dumps(rule, sort_keys=True)
+
+                    if key in seen:
+                        continue
+
+                    seen.add(key)
+                    all_rules.append(rule)
+                    imported += 1
+
+                print(
+                    f"[Rules] {name:<20} "
+                    f"{imported:,} unique rules"
+                )
+
+            except Exception as e:
+                print(f"[Rules] {name}: {e}")
+
+        print(
+            f"[Rules] Imported {len(all_rules):,} unique rules"
+        )
+
+        if len(all_rules) >= MAX_RULES:
+            print(
+                f"[Rules] Reached WebKit limit ({MAX_RULES:,} rules)"
+            )
+
+        print(
+            f"[Rules] Unsupported ABP rules skipped: "
+            f"{cls._unsupported_rules:,}"
+        )
+
+        return all_rules
+        
+    @classmethod
+    def _parse_abp_line(cls, line):
+
+        line = line.strip()
+
+        # --------------------------------------------------
+        # Empty / comments / metadata
+        # --------------------------------------------------
+        if not line:
+            return []
+
+        if line.startswith(("!", "[")):
+            return []
+
+        # --------------------------------------------------
+        # Ignore exception rules for now
+        # --------------------------------------------------
+        if line.startswith("@@"):
+            return []
+
+        # --------------------------------------------------
+        # Initialize CSS cache
+        # --------------------------------------------------
+        if not hasattr(cls, "_css_seen"):
+            cls._css_seen = set()
+
+         # ==================================================
+        # NETWORK RULES
+        # ==================================================
+
+        if line.startswith("||"):
+
+            body = line[2:]
+            modifiers = ""
+
+            if "$" in body:
+                body, modifiers = body.split("$", 1)
+
+            body = body.strip()
+
+            # Require hostname anchor
+            if "^" not in body:
+                return []
+
+            body = body.split("^", 1)[0].strip()
+
+            # Reject anything that is not a plain hostname
+            if any(c in body for c in (
+                "/", "*", "|", "?",
+                "=", "%", ":",
+                "(", ")", "[", "]",
+                "\\"
+            )):
+                return []
+
+            if not re.fullmatch(r"[A-Za-z0-9.-]+", body):
+                return []
+
+            # ----------------------------------------------
+            # Parse modifiers
+            # ----------------------------------------------
+
+            mods = {
+                m.strip().lower()
+                for m in modifiers.split(",")
+                if m.strip()
+            }
+
+            unsupported = (
+                "script",
+                "image",
+                "stylesheet",
+                "font",
+                "media",
+                "popup",
+                "xmlhttprequest",
+                "object",
+                "object-subrequest",
+                "ping",
+                "websocket",
+                "subdocument",
+                "document",
+                "elemhide",
+                "generichide",
+                "genericblock",
+                "csp",
+                "redirect",
+                "removeparam",
+                "important",
+            )
+
+            if any(
+                m == u or m.startswith(u + "=")
+                for u in unsupported
+                for m in mods
+            ):
+                cls._unsupported_rules += 1
+                return []
+
+            trigger = {
+                "url-filter": re.escape(body),
+            }
+
+            if "third-party" in mods:
+                trigger["load-type"] = ["third-party"]
+            elif "first-party" in mods:
+                trigger["load-type"] = ["first-party"]
+
+            return [{
+                "trigger": trigger,
+                "action": {
+                    "type": "block",
+                },
+            }]
+        # ==================================================
+        # DOMAIN COSMETIC RULES
+        # ==================================================
+
+        if False and "##" in line:
+
+            domain_part, selector = line.split("##", 1)
+
+            selector = selector.strip()
+
+            if not selector:
+                return []
+
+            # ignore unsupported cosmetic syntaxes
+            if selector.startswith(("?", "+js", "^")):
+                return []
+
+            # reject malformed selectors
+            if selector[0] not in (".", "#", "["):
+                return []
+
+            # Global cosmetic rule
+            if domain_part == "":
+
+                key = ("*", selector)
+
+                if key in cls._css_seen:
+                    return []
+
+                cls._css_seen.add(key)
+
+                return [{
+                    "trigger": {
+                        "url-filter": ".*"
+                    },
+                    "action": {
+                        "type": "css-display-none",
+                        "selector": selector
+                    }
+                }]
+
+            # Domain-scoped cosmetic rule
+            domains = []
+
+            for d in domain_part.split(","):
+
+                d = d.strip()
+
+                if not d:
+                    continue
+
+                if d.startswith("~"):
+                    continue
+
+                d = d.replace("*.", "")
+                d = d.replace("*", "")
+
+                d = re.escape(d)
+
+                domains.append(d)
+
+            rules = []
+
+            for domain in domains:
+    
+                key = (domain, selector)
+
+                if key in cls._css_seen:
+                    continue
+
+                cls._css_seen.add(key)
+
+                rules.append({
+                    "trigger": {
+                        "url-filter": domain
+                    },
+                    "action": {
+                        "type": "css-display-none",
+                        "selector": selector
+                    }
+                })
+
+            return rules
+
+        return []
+        
+    @classmethod
+    def _rules_revision(cls):
+        enabled = ",".join(
+            name
+            for name, info in sorted(cls.SUBSCRIPTIONS.items())
+            if info.get("enabled")
+        )
+        return hashlib.sha1(enabled.encode()).hexdigest()[:8]
+        
     @classmethod
     def load_rules(cls, completion_callback=None):
+        cls._ensure_cache()
+        try:
+            cls.refresh_subscriptions()
+        except Exception as e:
+            print("[Rules] Subscription update failed:", e)
+            
         if cls._loaded:
             if cls._rule_list and completion_callback:
                 completion_callback()
@@ -2106,68 +2559,250 @@ class ContentRuleManager:
 
         cls._loaded = True
         store = WKContentRuleListStore.defaultStore()
-
+        
         # 🔥 NEW VERSION
-        identifier = "darkelf_builtin_rules_v32_balanced_cnn_fixed"
+        identifier = f"darkelf_rules_v{cls.VERSION}"
 
         def _lookup(rule_list, error):
+
+            # --------------------------------------------------
+            # Ignore "rule list not found" (WKErrorDomain Code 7)
+            # --------------------------------------------------
+            if error:
+                try:
+                    if error.code() != 7:
+                        print("error =", error)
+                except Exception:
+                    print("error =", error)
+                    
+            # --------------------------------------------------
+            # Cached rule list
+            # --------------------------------------------------
             if rule_list:
+
+                print("[Rules] Using cached ContentRuleList")
+
                 cls._rule_list = rule_list
+
+                print(
+                    f"[Rules] Loaded cached ContentRuleList (v{cls.VERSION})"
+                )
+
                 if completion_callback:
                     completion_callback()
+
                 return
+
+            # --------------------------------------------------
+            # Build JSON
+            # --------------------------------------------------
+            print("[Rules] Building new ContentRuleList...")
 
             json_rules = cls._load_json()
 
+            try:
+                parsed = json.loads(json_rules)
+
+                cls._rule_count = len(parsed)
+
+                cls._tracker_count = sum(
+                    1 for r in parsed
+                    if r.get("action", {}).get("type") == "block"
+                )
+
+                cls._css_count = sum(
+                    1 for r in parsed
+                    if r.get("action", {}).get("type") == "css-display-none"
+                )
+
+            except Exception:
+                cls._rule_count = 0
+                cls._tracker_count = 0
+                cls._css_count = 0
+
+            # --------------------------------------------------
+            # Compile callback
+            # --------------------------------------------------
             def _compiled(rule_list, error):
+
+                print("[Rules] _compiled callback")
+                print("rule_list =", bool(rule_list))
+                print("error =", error)
+
                 if error:
-                    print("[Rules] Compile error:", error)
+                    print(f"[Rules] Compile error (v{cls.VERSION}):", error)
                     return
 
                 cls._rule_list = rule_list
-                print("[Rules] v32 balanced rules loaded (CNN fixed, no breakage)")
+                cls._compile_count += 1
+
+                print(
+                    f"[Rules] Darkelf Content Rules v{cls.VERSION} loaded "
+                    f"({cls._rule_count:,} rules | "
+                    f"{cls._tracker_count:,} block | "
+                    f"{cls._css_count:,} css)"
+                )
 
                 if completion_callback:
                     completion_callback()
 
-            store.compileContentRuleListForIdentifier_encodedContentRuleList_completionHandler_(
-                identifier, json_rules, _compiled
-            )
+            print("[Rules] Compiling rule list...")
 
-        store.lookUpContentRuleListForIdentifier_completionHandler_(identifier, _lookup)
+            store.compileContentRuleListForIdentifier_encodedContentRuleList_completionHandler_(
+                identifier,
+                json_rules,
+                _compiled,
+            )
+            
+        store.lookUpContentRuleListForIdentifier_completionHandler_(
+            identifier,
+            _lookup,
+        )
 
     @classmethod
     def _load_json(cls):
+
         rules = []
+        seen = set()
+
+        def add(rule):
+
+            key = json.dumps(rule, sort_keys=True)
+
+            if key in seen:
+                return
+
+            seen.add(key)
+            rules.append(rule)
 
         # --------------------------------------------------
-        # SAFE SITES (minimal!)
+        # Safe Sites
         # --------------------------------------------------
-        SAFE_SITES = [
-            "tuta\\.com",
-            "mail\\.google\\.com",
+
+        SAFE_SITES = sorted(set([
             "accounts\\.google\\.com",
-            "outlook\\.live\\.com",
-            "office\\.com",
             "github\\.com",
+            "mail\\.google\\.com",
+            "office\\.com",
+            "outlook\\.live\\.com",
+            "tuta\\.com",
             "youtube\\.com",
             "youtu\\.be",
-        ]
+        ]))
 
-        for s in SAFE_SITES:
-            rules.append(
-                {
-                    "trigger": {"url-filter": s},
-                    "action": {"type": "ignore-previous-rules"},
+        for site in SAFE_SITES:
+
+            add({
+                "trigger": {
+                    "url-filter": site
+                },
+                "action": {
+                    "type": "ignore-previous-rules"
                 }
-            )
+            })
 
         # --------------------------------------------------
-        # HARD BLOCK TRACKERS / AD NETWORKS
+        # Test Blocks
         # --------------------------------------------------
+
+        for url in (
+            ".*amazon-adsystem.*",
+            ".*amazon_apstag.*",
+            ".*analytics.*collect.*",
+            ".*collect.*",
+            ".*telemetry.*",
+            ".*metrics.*",
+            ".*beacon.*",
+            ".*tracker.*",
+            ".*tracking.*",
+            ".*fingerprint.*",
+            ".*fingerprintjs.*",
+            ".*fpjs.*",
+            ".*pixel.*",
+            ".*adsystem.*",
+            ".*advertising.*",
+            ".*ads.*\\.js",
+            ".*ads.*\\.mjs",
+            ".*ads.*\\.min\\.js",
+            ".*prebid.*",
+            ".*prebid\\.js",
+            ".*prebid\\.min\\.js",
+            ".*optimizely.*",
+            ".*fullstory.*",
+            ".*heap.*",
+            ".*heapanalytics.*",
+            ".*appsflyer.*",
+            ".*adjust.*",
+            ".*branch.*",
+            ".*/pagead\\.js",
+            ".*/widget/ads",
+            ".*analytics\\.js",
+            ".*gtm\\.js",
+            ".*gtag/js",
+            ".*fbevents\\.js",
+            ".*clarity\\.js",
+            ".*hotjar.*\\.js",
+            ".*mixpanel.*\\.js",
+            ".*segment.*\\.js",
+            ".*amplitude.*\\.js",
+            ".*adsbygoogle\\.js",
+            ".*prebid.*\\.js"
+            
+        ):
+
+            add({
+                "trigger": {
+                    "url-filter": url
+                },
+                "action": {
+                    "type": "block"
+                }
+            })
+
+        # --------------------------------------------------
+        # Built-in Tracker Domains
+        # --------------------------------------------------
+
         BLOCK_DOMAINS = [
+            # <-- paste your existing list here -->
+        ]
+        
+        BLOCK_DOMAINS = sorted({
+        
+            #----------------Ads----------------------
+            "adsrvr.com",
+            "casalemedia.com",
+            "demdex.net",
+            "everesttech.net",
+            "everestjs.net",
+            "rlcdn.com",
+            "mathtag.com",
+            "advertising.com",
+            "yieldmo.com",
+            "yieldlab.net",
+            "yieldoptimizer.com",
+            "contextweb.com",
+            "33across.com",
+            "sharethrough.com",
+            "triplelift.com",
+            "sovrn.com",
+            "lijit.com",
+            "media.net",
+            "bidswitch.com",
+            "indexww.com",
+            "pub.network",
+            "crwdcntrl.net",
+            "eyeota.net",
+            "simpli.fi",
+            "adform.net",
+            "adform.com",
+            "bluekai.com",
+            "tapad.com",
+            "teads.tv",
+            "revcontent.com",
+            "contentabc.com",
 
-            # Google
+            # ---------------- Google ----------------
             "doubleclick\\.net",
             "googlesyndication\\.com",
             "googleadservices\\.com",
@@ -2179,181 +2814,357 @@ class ContentRuleManager:
             "pagead2\\.googlesyndication\\.com",
             "pagead2\\.googleadservices\\.com",
 
-            # Meta
+            # ---------------- Meta ----------------
             "facebook\\.net",
             "connect\\.facebook\\.net",
             "pixel\\.facebook\\.com",
+            "an\\.facebook\\.com",
 
-            # Amazon
-            "amazon-adsystem\\.com",
-            "analyticsengine\\.s3\\.amazonaws\\.com",
-            "adtag\\.s3\\.amazonaws\\.com",
-
-            # Microsoft
+            # ---------------- Microsoft ----------------
             "bat\\.bing\\.com",
             "clarity\\.ms",
 
-            # Yahoo
+            # ---------------- Yahoo ----------------
             "analytics\\.yahoo\\.com",
             "geo\\.yahoo\\.com",
             "udcm\\.yahoo\\.com",
 
-            # Yandex
+            # ---------------- Yandex ----------------
             "appmetrica\\.yandex\\.ru",
             "metrika\\.yandex\\.ru",
             "adfox\\.yandex\\.ru",
 
-            # Adobe
-            "omtrdc\\.net",
+            # ---------------- Adobe ----------------
             "demdex\\.net",
+            "omtrdc\\.net",
 
-            # Twitter / X
+            # ---------------- Twitter/X ----------------
             "ads-api\\.twitter\\.com",
             "static\\.ads-twitter\\.com",
 
-            # LinkedIn
+            # ---------------- LinkedIn ----------------
             "ads\\.linkedin\\.com",
             "analytics\\.pointdrive\\.linkedin\\.com",
+            "snap\\.licdn\\.com",
+            "px\\.ads\\.linkedin\\.com",
 
-            # Pinterest
+            # ---------------- Pinterest ----------------
             "ads\\.pinterest\\.com",
             "trk\\.pinterest\\.com",
             "log\\.pinterest\\.com",
 
-            # Reddit
+            # ---------------- Reddit ----------------
             "events\\.redditmedia\\.com",
 
-            # TikTok
+            # ---------------- TikTok ----------------
             "analytics\\.tiktok\\.com",
 
-            # Snapchat
+            # ---------------- Snapchat ----------------
             "tr\\.snapchat\\.com",
 
-            # Criteo
+            # ---------------- Native Ads ----------------
+            "taboola\\.com",
+            "outbrain\\.com",
+            "revcontent\\.com",
+            "nativo\\.net",
+            "s\\.ntv\\.io",
+
+            # ---------------- Ad Exchanges ----------------
+            "pubmatic\\.com",
+            "rubiconproject\\.com",
+            "openx\\.net",
+            "indexexchange\\.com",
+            "media\\.net",
             "criteo\\.com",
 
-            # Taboola
-            "taboola\\.com",
-
-            # Outbrain
-            "outbrain\\.com",
-
-            # Pubmatic
-            "pubmatic\\.com",
-
-            # Rubicon
-            "rubiconproject\\.com",
-
-            # OpenX
-            "openx\\.net",
-
-            # Index Exchange
-            "indexexchange\\.com",
-
-            # Media.net
-            "media\\.net",
-
-            # Moat
+            # ---------------- Measurement ----------------
+            "chartbeat\\.net",
+            "ping\\.chartbeat\\.net",
+            "quantserve\\.com",
+            "scorecardresearch\\.com",
             "moatads\\.com",
 
-            # Quantcast
-            "quantserve\\.com",
+            # ---------------- Mixpanel ----------------
+            "mixpanel\\.com",
+            "api\\.mixpanel\\.com",
+            "cdn\\.mxpnl\\.com",
 
-            # Scorecard
-            "scorecardresearch\\.com",
+            # ---------------- Segment ----------------
+            "segment\\.com",
+            "api\\.segment\\.io",
+            "cdn\\.segment\\.com",
 
-            # Bugsnag
+            # ---------------- Amplitude ----------------
+            "amplitude\\.com",
+            "api\\.amplitude\\.com",
+
+            # ---------------- New Relic ----------------
+            "js-agent\\.newrelic\\.com",
+            "bam\\.nr-data\\.net",
+
+            # ---------------- Datadog ----------------
+            "browser-intake-datadoghq\\.com",
+
+            # ---------------- Sentry ----------------
+            "browser\\.sentry-cdn\\.com",
+            "app\\.getsentry\\.com",
+
+            # ---------------- Bugsnag ----------------
             "notify\\.bugsnag\\.com",
             "sessions\\.bugsnag\\.com",
             "api\\.bugsnag\\.com",
             "app\\.bugsnag\\.com",
 
-            # Sentry
-            "browser\\.sentry-cdn\\.com",
-            "app\\.getsentry\\.com",
-
-            # Mouseflow
+            # ---------------- Mouseflow ----------------
             "mouseflow\\.com",
             "cdn\\.mouseflow\\.com",
             "api\\.mouseflow\\.com",
 
-            # Hotjar
+            # ---------------- Hotjar ----------------
             "hotjar\\.com",
             "insights\\.hotjar\\.com",
             "identify\\.hotjar\\.com",
             "script\\.hotjar\\.com",
             "surveys\\.hotjar\\.com",
 
-            # Freshworks
+            # ---------------- Lucky Orange ----------------
+            "luckyorange\\.com",
+            "upload\\.luckyorange\\.net",
+            "cs\\.luckyorange\\.net",
+            "settings\\.luckyorange\\.net",
+            "cdn\\.luckyorange\\.com",
+            "api\\.luckyorange\\.com",
+            "w1\\.luckyorange\\.com",
+            "tools\\.luckyorange\\.com",
+
+            # ---------------- Freshworks ----------------
             "freshmarketer\\.com",
 
-            # LuckyOrange
-            "luckyorange\\.com",
+            # ---------------- Oracle ----------------
+            "bluekai\\.com",
+            "tags\\.bluekai\\.com",
+            "trk\\.bluekai\\.com",
 
-            # Huawei
-            "hicloud\\.com",
+            # ---------------- Mobile SDKs ----------------
+            "appsflyer\\.com",
+            "adjust\\.com",
+            "kochava\\.com",
+            "branch\\.io",
+            "heapanalytics\\.com",
+            "fullstory\\.com",
+            "braze\\.com",
+            "appboy\\.com",
+            "onesignal\\.com",
+            "optimizely\\.com",
 
-            # Xiaomi
+            # ---------------- Cloudflare ----------------
+            "zaraz\\.cloudflare\\.com",
+
+            # ---------------- OEM ----------------
             "mistat\\.xiaomi\\.com",
             "api\\.ad\\.xiaomi\\.com",
-
-            # Oppo
             "oppomobile\\.com",
-
-            # Realme
             "realmemobile\\.com",
+            "hicloud\\.com",
 
-            # Samsung
+            # ---------------- Samsung ----------------
             "samsungads\\.com",
             "smetrics\\.samsung\\.com",
 
-            # Apple
+            # ---------------- Gaming ----------------
+            "applovin\\.com",
+            "d\\.applovin\\.com",
+            "unityads\\.unity3d\\.com",
+            "config\\.unityads\\.unity3d\\.com",
+            "ironsrc\\.com",
+            "vungle\\.com",
+            "ads30\\.adcolony\\.com",
+            "adc3-launch\\.adcolony\\.com",
+            "events3alt\\.adcolony\\.com",
+            "wd\\.adcolony\\.com",
+
+            # ---------------- Apple ----------------
             "metrics\\.icloud\\.com",
             "metrics\\.mzstatic\\.com",
             "api-adservices\\.apple\\.com",
             "books-analytics-events\\.apple\\.com",
             "weather-analytics-events\\.apple\\.com",
             "notes-analytics-events\\.apple\\.com",
-        ]
+
+            # ---------------- Teads ----------------
+            "teads\\.tv",
+            "a\\.teads\\.tv",
+            "cdn\\.teads\\.tv",
+            
+            # ---------------- Reddit ----------------
+            "events\\.reddit\\.com",
+
+            # ---------------- TikTok ----------------
+            "ads-api\\.tiktok\\.com",
+            "ads\\.tiktok\\.com",
+            "ads-sg\\.tiktok\\.com",
+            "analytics-sg\\.tiktok\\.com",
+            "business-api\\.tiktok\\.com",
+            "log\\.byteoversea\\.com",
+            "log\\.byteoversea\\.net",
+
+            # ---------------- Xiaomi ----------------
+            "sdkconfig\\.ad\\.xiaomi\\.com",
+            "sdkconfig\\.ad\\.intl\\.xiaomi\\.com",
+            "tracking\\.rus\\.miui\\.com",
+            "tracking\\.intl\\.miui\\.com",
+            "data\\.mistat\\.india\\.xiaomi\\.com",
+            "data\\.mistat\\.rus\\.xiaomi\\.com",
+
+            # ---------------- Realme ----------------
+            "iot-eu-logger\\.realme\\.com",
+            "iot-logger\\.realme\\.com",
+            "bdapi-ads\\.realmemobile\\.com",
+            "bdapi-in-ads\\.realmemobile\\.com",
+
+            # ---------------- Oppo ----------------
+            "adsfs\\.oppomobile\\.com",
+            "adx\\.ads\\.oppomobile\\.com",
+
+            # ---------------- Huawei ----------------
+            "metrics\\.cloud\\.huawei\\.com",
+            "grs\\.hicloud\\.com",
+            "logservice\\.hicloud\\.com",
+
+            # ---------------- Vivo ----------------
+            "adxlog\\.vivo\\.com",
+            "stsdk\\.vivo\\.com",
+
+            # ---------------- Amazon ----------------
+            "amazon-adsystem\\.com",
+            "aax\\.amazon-adsystem\\.com",
+            "c\\.amazon-adsystem\\.com",
+
+            # ---------------- Fingerprinting ----------------
+            "fingerprintjs\\.com",
+            "fpjs\\.io",
+            "client\\.fpjs\\.io",
+            
+            #---------------- Extra-------------------
+            ".*amazon_apstag.*\\.js",
+            ".*gpt\\.js",
+            ".*cmp.*\\.js",
+            ".*consent.*\\.js",
+            ".*adsystem.*\\.js",
+            ".*adservice.*\\.js",
+            ".*analytics.*collect.*",
+            ".*pixel.*\\.js",
+            ".*tracking.*\\.js",
+            ".*advertising.*\\.js",
+            
+            # ---------------- Tremor ----------------
+            "tremorhub\\.com",
+            "ads\\.tremorhub\\.com",
+
+        })
         
-        for d in BLOCK_DOMAINS:
-            rules.append({"trigger": {"url-filter": d}, "action": {"type": "block"}})
+
+        for domain in sorted(set(BLOCK_DOMAINS)):
+
+            add({
+                "trigger": {
+                    "url-filter": domain
+                },
+                "action": {
+                    "type": "block"
+                }
+            })
 
         # --------------------------------------------------
-        # FIRST-PARTY AD ENDPOINT BLOCKING
+        # Consent
         # --------------------------------------------------
-        rules += [
-            {"trigger": {"url-filter": "cnn\\.com.*ad"}, "action": {"type": "block"}},
-            {
-                "trigger": {"url-filter": "cdn\\.cnn\\.com.*ad"},
-                "action": {"type": "block"},
-            },
-            {
-                "trigger": {"url-filter": "assets\\.cnn\\.com.*ad"},
-                "action": {"type": "block"},
-            },
-            {
-                "trigger": {"url-filter": "foxnews\\.com.*ad"},
-                "action": {"type": "block"},
-            },
-            {
-                "trigger": {"url-filter": "euronews\\.com.*ad"},
-                "action": {"type": "block"},
-            },
-            {
-                "trigger": {"url-filter": "turner\\.com.*ads"},
-                "action": {"type": "block"},
-            },
-        ]
 
+        for domain in (
+            "cookiebot",
+            "consentmanager",
+            "onetrust",
+            "quantcast",
+            "trustarc",
+            "didomi",
+            "usercentrics",
+            "cookielaw",
+            "cookieyes",
+            "iubenda",
+            "cookie-script",
+            "cookieinformation",
+            "osano",
+            "cookiehub",
+            
+        ):
+
+            add({
+                "trigger": {
+                    "url-filter": domain,
+                    "load-type": ["third-party"]
+                },
+                "action": {
+                    "type": "block"
+                }
+            })
         # --------------------------------------------------
-        # CONSENT / GDPR POPUPS
+        # Cosmetic
         # --------------------------------------------------
-        CONSENT = ["cookiebot", "onetrust", "trustarc", "quantcast", "consentmanager"]
 
-        for c in CONSENT:
-            rules.append({"trigger": {"url-filter": c}, "action": {"type": "block"}})
+        add({
+            "trigger": {
+                "url-filter": ".*"
+            },
+            "action": {
+                "type": "css-display-none",
+                "selector": """
+    iframe[src*='doubleclick'],
+    iframe[src*='googlesyndication'],
+    iframe[src*='adservice'],
+    iframe[src*='googletagmanager'],
+    iframe[src*='taboola'],
+    iframe[src*='outbrain'],
+    iframe[src*='criteo'],
+    iframe[src*='adnxs'],
+    iframe[src*='pubmatic'],
+    iframe[src*='openx'],
+    iframe[src*='rubicon'],
+    iframe[src*='amazon-adsystem']    
+    """
+            }
+        })
 
+        add({
+            "trigger": {
+                "url-filter": ".*"
+            },
+            "action": {
+                "type": "css-display-none",
+                "selector": """
+    [data-ad]:empty,
+    [data-ad-container]:empty,
+    [data-slot-type='ad']:empty,
+    [aria-label='Advertisement']:empty,
+    .ad,
+    .ads,
+    .advertisement,
+    .advert,
+    .ad-container,
+    .advert-container,        
+    .banner-ad,
+    .banner_ads,
+    .ad-wrapper,
+    .adbox,
+    .adunit,
+    .ad-label,
+    .promoted-post,
+    .sponsored-post,
+    [data-google-query-id],
+    [data-ad-slot],
+    [data-ad-client]    
+    """
+            }
+        })
+        
         # --------------------------------------------------
         # GLOBAL COSMETIC (SAFE ONLY)
         # --------------------------------------------------
@@ -2374,43 +3185,50 @@ class ContentRuleManager:
                 },
             }
         )
+        
+        add({
+            "trigger": {
+                "url-filter": ".*"
+            },
+            "action": {
+                "type": "css-display-none",
+                "selector": """
+[id^='google_ads'],
+[id^='div-gpt-ad'],
+[id*='div-gpt-ad'],
 
-        # --------------------------------------------------
-        # CNN FIX (SAFE — NO EMPTY GHOST BOXES)
-        # --------------------------------------------------
-        rules.append(
-            {
-                "trigger": {"url-filter": "cnn\\.com"},
-                "action": {
-                    "type": "css-display-none",
-                    "selector": """
-                        /* REAL ad units only */
-                        iframe[src*='doubleclick'],
-                        iframe[src*='googlesyndication'],
+[data-google-av-cxn],
+[data-google-query-id],
 
-                        .ad-slot-header,
-                        .ad-slot-banner,
-                        .ad-slot-wallpaper,
-                        .ad-container--desktop,
-                        .ad-container--mobile,
-                        .banner-ad-container,
-                        .sponsored-container,
+[class*='advertisement'],
+[class*='ad-slot'],
+[class*='ad-wrapper'],
+[class*='banner-ad'],
+[class*='ad-container'],
+[class*='ad-placeholder'],
+[class*='sponsored-post'],
+[class*='promoted-post'],
+[class*='google-ad'],
+[class*='adsense'],
 
-                        [data-ad],
-                        [data-ad-container],
-                        [data-slot-type='ad'],
-
-                        /* CNN video ads */
-                        .video__end-slate-ad,
-                        .video-ads,
-
-                        /* remove EMPTY placeholders safely */
-                        .container__ads:empty,
-                        .ad-placeholder:empty
-                    """,
-                },
+[data-testid='ad'],
+[data-testid='advertisement']
+"""
             }
-        )
+        })
+        
+        add({
+            "trigger": {
+                "url-filter": "adblock\\.turtlecute\\.org"
+            },
+            "action": {
+                "type": "css-display-none",
+                "selector": """
+.adbox.banner_ads.adsbox,
+.textads
+"""
+            }
+        })
         
         # --------------------------------------------------
         # GITHUB ALLOWLIST
@@ -2425,17 +3243,27 @@ class ContentRuleManager:
                 }
             }
         )
+        # --------------------------------------------------
+        # Popup Block
+        # --------------------------------------------------
 
-        # --------------------------------------------------
-        # POPUP BLOCK
-        # --------------------------------------------------
-        rules.append(
-            {
-                "trigger": {"url-filter": ".*", "resource-type": ["popup"]},
-                "action": {"type": "block"},
+        add({
+            "trigger": {
+                "url-filter": ".*",
+                "resource-type": ["popup"]
+            },
+            "action": {
+                "type": "block"
             }
-        )
+        })
+        
+        # --------------------------------------------------
+        # Subscription Rules
+        # --------------------------------------------------
 
+        for rule in cls._external_subscription_rules():
+            add(rule)
+            
         return json.dumps(rules)
 
 
@@ -2671,6 +3499,7 @@ class _NavDelegate(NSObject):
 
             browser._update_tab_buttons()
             browser._sync_addr()
+            browser.refreshBookmarkButton()
 
             # ----------------------------
             # WebKit process recycle (UNCHANGED)
@@ -3019,7 +3848,7 @@ class _NavDelegate(NSObject):
                         ui.setFrame_(
                             NSMakeRect(
                                 20,  # left margin
-                                parent.bounds().size.height - 100,  # top position
+                                parent.bounds().size.height - 90,  # top position
                                 515,  # FIXED WIDTH (this is the key)
                                 70,
                             )
@@ -3309,27 +4138,6 @@ class _NavDelegate(NSObject):
             # Allow blob URLs (downloads, media, etc)
             # -------------------------------------------------
             if scheme == "blob":
-                decisionHandler(WKNavigationActionPolicyAllow)
-                return
-
-            # -------------------------------------------------
-            # Internal Darkelf pages
-            # -------------------------------------------------
-            if scheme == "darkelf":
-
-                # reload threat report
-                if nav_type == WKNavigationTypeReload and url_str == "darkelf://report":
-                    if owner and hasattr(owner, "_build_threat_report_html"):
-                        try:
-                            html = owner._build_threat_report_html()
-                            webView.loadHTMLString_baseURL_(
-                                html, NSURL.URLWithString_("darkelf://report")
-                            )
-                        except Exception as e:
-                            log(2, e)
-                    decisionHandler(WKNavigationActionPolicyCancel)
-                    return
-
                 decisionHandler(WKNavigationActionPolicyAllow)
                 return
 
@@ -4231,13 +5039,17 @@ class AddressField(NSSearchField):
 
     def rightMouseDown_(self, event):
         try:
-            loc = event.locationInWindow()
-            if hasattr(self, "_owner") and self._owner:
-                self._owner._show_context_popover(self, loc)
+            owner = getattr(self, "_owner", None)
+
+            if owner and hasattr(owner, "_show_context_popover"):
+                loc = event.locationInWindow()
+                owner._show_context_popover(self, loc)
             else:
                 objc.super(AddressField, self).rightMouseDown_(event)
+
         except Exception as e:
             print("Context menu popover error:", e)
+            objc.super(AddressField, self).rightMouseDown_(event)
             
 class DraggableFindBar(NSView):
 
@@ -4300,6 +5112,10 @@ class Browser(NSObject):
         if self is None:
             return None
             
+        self.menu_panel = None
+        self.menu_open = False
+        self._initBookmarks()
+        self._initKeyboardShortcuts()
         # ----------------------------
         # PQ CORE (SESSION LEVEL)
         # ----------------------------
@@ -4442,7 +5258,192 @@ class Browser(NSObject):
             log(2, e)
 
         return self
+        
+        # ============================================================
+        # BOOKMARKS
+        # ============================================================
 
+        BOOKMARK_FILE = os.path.join(
+            os.path.expanduser("~"),
+            ".darkelf_bookmarks.json"
+        )
+        
+        # --------------------------------------------------
+        # Keyboard Shortcut Library
+        # --------------------------------------------------
+
+        self.shortcut_sections = {
+
+            "Navigation": [
+                ("⌘←", "Back"),
+                ("⌘→", "Forward"),
+                ("⌘R", "Reload"),
+                ("⌘L", "Focus Address Bar"),
+                ("⌘F", "Find in Page"),
+                ("ESC", "Close Find Bar"),
+                ("⌃⌘F", "Toggle Fullscreen"),
+            ],
+
+            "Tabs": [
+                ("⌘T", "New Tab"),
+                ("⌘W", "Close Tab"),
+            ],
+
+            "Zoom": [
+                ("⌘+", "Zoom In"),
+                ("⌘-", "Zoom Out"),
+            ],
+
+            "Application": [
+                ("⇧⌘X", "Exit Darkelf"),
+            ],
+        }
+
+        self.shortcut_expanded = {
+            section: True
+            for section in self.shortcut_sections
+        }
+        
+    def showKeyboardShortcuts_(self, sender):
+
+        if not getattr(self, "shortcut_view", None):
+            self._createShortcutView()
+
+        if getattr(self, "bookmark_view", None):
+            self.bookmark_view.setHidden_(True)
+
+        for b in (
+            self.btn_bookmarks,
+            self.btn_add_bookmark,
+            self.btn_hotkeys,
+            self.btn_mini_ai,
+            self.btn_nuke,
+            self.btn_js,
+            self.btn_about,
+        ):
+            b.setHidden_(True)
+
+        self.shortcut_view.setHidden_(False)
+
+        self._reloadShortcutList()
+        
+    def toggleShortcutSection_(self, sender):
+
+        sections = list(self.shortcut_sections.keys())
+
+        index = sender.tag()
+
+        if index < 0 or index >= len(sections):
+            return
+
+        section = sections[index]
+
+        self.shortcut_expanded[section] = (
+            not self.shortcut_expanded.get(section, True)
+        )
+
+        self._reloadShortcutList()
+            
+    def _initBookmarks(self):
+
+        self.bookmarks = []
+        self.bookmark_mode = False
+        self._loadBookmarks()
+        
+    def _initKeyboardShortcuts(self):
+    
+        # ------------------------------------
+        # Keyboard Shortcut Categories
+        # ------------------------------------
+
+        self.shortcut_sections = {
+
+            "Navigation": [
+                ("⌘←", "Back"),
+                ("⌘→", "Forward"),
+                ("⌘R", "Reload"),
+                ("⌘L", "Focus Address Bar"),
+                ("⌘F", "Find in Page"),
+                ("ESC", "Close Find Bar"),
+                ("⌃⌘F", "Toggle Fullscreen"),
+            ],
+
+            "Tabs": [
+                ("⌘T", "New Tab"),
+                ("⌘W", "Close Tab"),
+            ],
+
+            "Zoom": [
+                ("⌘+", "Zoom In"),
+                ("⌘-", "Zoom Out"),
+            ],
+
+            "Application": [
+                ("⇧⌘X", "Exit Darkelf"),
+            ],
+        }
+
+        # Start collapsed
+        self.shortcut_expanded = {
+            section: False
+            for section in self.shortcut_sections
+        }
+
+        self._loadBookmarks()
+
+    def _loadBookmarks(self):
+        self.bookmarks = []
+        
+    def _saveBookmarks(self):
+        return
+
+    def addCurrentBookmark_(self, sender=None):
+
+        if self.active < 0:
+            return
+
+        tab = self.tabs[self.active]
+
+        url = getattr(tab, "url", "")
+        title = getattr(tab, "title", "") or url
+
+        if not url:
+            return
+
+        for b in self.bookmarks:
+            if b["url"] == url:
+                return
+
+        self.bookmarks.append(
+            {
+                "title": title,
+                "url": url,
+            }
+        )
+
+        self._saveBookmarks()
+
+        if self.bookmark_mode:
+            self._reloadBookmarkList()
+
+    def openBookmark_(self, sender):
+
+        idx = sender.tag()
+
+        if idx < 0 or idx >= len(self.bookmarks):
+            return
+
+        url = self.bookmarks[idx]["url"]
+
+        # Return to the normal menu state
+        self.showMainMenu_(None)
+
+        # Load the bookmarked page
+        self._load_url_in_active(url)
+
+        # Close the hamburger menu
+        self.toggleMenu_(None)
+            
     def _cleanup_unused_containers(self):
 
         try:
@@ -4476,699 +5477,1288 @@ class Browser(NSObject):
         if not hasattr(self, "mini_ai"):
             return
 
-        import time
-
-        now = time.time()
-
         try:
-            # Only check unlock timer
-            self.mini_ai._maybe_auto_unlock(now)
+            # Handle automatic lockdown expiration
+            self.mini_ai._maybe_auto_unlock(time.time())
         except Exception as e:
             print("[MiniAI Timer Error]", e)
 
-        # Update indicator only if not on report tab
         try:
-            if self.tabs and self.active >= 0:
-                if getattr(self.tabs[self.active], "url", "") != "darkelf://report":
-                    self.updateMiniAIIndicator()
+            # Refresh the MiniAI status panel
+            self.updateMiniAIIndicator()
         except Exception as e:
             log(2, e)
+            
+    def _createMenuPanel(self):
+        
+        if self.menu_panel:
+            return
 
-    def openThreatReport_(self, sender):
+        width = 220
+        height = 300
+
+        cv = self.window.contentView()
+
+        f = cv.bounds()
+
+        self.menu_panel = NSView.alloc().initWithFrame_(
+            NSMakeRect(
+                f.size.width,
+                f.size.height - height - 40,
+                width,
+                height,
+            )
+        )
+
+        self.menu_panel.setAutoresizingMask_(
+            NSViewMinXMargin | NSViewMinYMargin
+        )
+
+        # ==========================================================
+        # DARKELF GLASS MENU PANEL
+        # ==========================================================
+
+        self.menu_panel.setWantsLayer_(True)
+
+        layer = self.menu_panel.layer()
+
+        # Deep matte black with transparency
+        layer.setBackgroundColor_(
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.02,
+                0.025,
+                0.03,
+                0.90,
+            ).CGColor()
+        )
+
+        # Rounded corners
+        layer.setCornerRadius_(16)
+
+        # Thin neon-green outline
+        layer.setBorderWidth_(1.0)
+
+        layer.setBorderColor_(
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.16,
+                0.95,
+                0.45,
+                0.18,
+            ).CGColor()
+        )
+
+        # Soft shadow
+        layer.setShadowOpacity_(0.55)
+
+        layer.setShadowRadius_(20)
+
+        layer.setShadowOffset_(NSMakeSize(0, -2))
+
+        layer.setShadowColor_(
+            NSColor.blackColor().CGColor()
+        )
+
+        # Crisp edges
+        layer.setMasksToBounds_(False)
+
+        cv.addSubview_(self.menu_panel)
+        
+        # ----------------------------------------------------------
+        # Menu Buttons
+        # ----------------------------------------------------------
+
+        self.btn_mini_ai.setTitle_(" MiniAI Report")
+        self.btn_nuke.setTitle_(" Nuke Session")
+        self.btn_js.setTitle_(" JavaScript")
+        self.btn_hotkeys.setTitle_(" Keyboard Shortcuts")
+
+        self.btn_bookmarks = NSButton.alloc().initWithFrame_(
+            NSMakeRect(16, 170, 192, 34)
+        )
+        self.btn_bookmarks.setTitle_(" Bookmarks")
+
+        bookmark_icon = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+            "bookmark.fill",
+            None,
+        )
+
+        bookmark_icon.setTemplate_(True)
+
+        self.btn_bookmarks.setImage_(bookmark_icon)
+
+        self.btn_bookmarks.setImagePosition_(NSImageLeft)
+
+        self.btn_bookmarks.setContentTintColor_(
+            NSColor.whiteColor()
+        )
+        self.btn_bookmarks.setBordered_(False)
+        self.btn_bookmarks.setBezelStyle_(0)
+        self.btn_bookmarks.setAlignment_(NSLeftTextAlignment)
+        self.btn_bookmarks.setFont_(NSFont.systemFontOfSize_(14))
+        self.btn_bookmarks.setTarget_(self)
+        self.btn_bookmarks.setAction_("showBookmarks:")
+
+        self.btn_add_bookmark = NSButton.alloc().initWithFrame_(
+            NSMakeRect(16, 132, 192, 34)
+        )
+        self.btn_add_bookmark.setTitle_(" ➕ Add Current Page")
+        self.btn_add_bookmark.setBordered_(False)
+        self.btn_add_bookmark.setBezelStyle_(0)
+        self.btn_add_bookmark.setAlignment_(NSLeftTextAlignment)
+        self.btn_add_bookmark.setFont_(NSFont.systemFontOfSize_(14))
+        self.btn_add_bookmark.setTarget_(self)
+        self.btn_add_bookmark.setAction_("addCurrentBookmark:")
+
+        # ----------------------------------------------------------
+        # About Darkelf
+        # ----------------------------------------------------------
+
+        self.btn_about = NSButton.alloc().initWithFrame_(
+            NSMakeRect(16, 94, 192, 34)
+        )
+
+        self.btn_about.setTitle_(" About Darkelf")
+
+        about_icon = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+            "info.circle.fill",
+            None,
+        )
+
+        if about_icon:
+            about_icon.setTemplate_(True)
+            self.btn_about.setImage_(about_icon)
+
+        self.btn_about.setImagePosition_(NSImageLeft)
+        self.btn_about.setContentTintColor_(NSColor.whiteColor())
+        self.btn_about.setBordered_(False)
+        self.btn_about.setBezelStyle_(0)
+        self.btn_about.setAlignment_(NSLeftTextAlignment)
+        self.btn_about.setFont_(NSFont.systemFontOfSize_(14))
+        self.btn_about.setTarget_(self)
+        self.btn_about.setAction_("showAboutView:")
+        
+        self.btn_mini_ai.removeFromSuperview()
+        self.btn_nuke.removeFromSuperview()
+        self.btn_js.removeFromSuperview()
+        self.btn_hotkeys.removeFromSuperview()
+        self.btn_add_bookmark.removeFromSuperview()
+        self.btn_about.removeFromSuperview()
+        
+        self.menu_panel.addSubview_(self.btn_bookmarks)
+        self.menu_panel.addSubview_(self.btn_add_bookmark)
+
+        buttons = [
+
+            self.btn_bookmarks,
+            self.btn_add_bookmark,
+
+            self.btn_mini_ai,
+            self.btn_nuke,
+            self.btn_js,
+            self.btn_hotkeys,
+            self.btn_about,
+        ]
+
+        y = 245
+
+        for b in buttons:
+
+            b.setFrame_(NSMakeRect(16, y, 192, 34))
+            b.setBordered_(False)
+            b.setBezelStyle_(0)
+            b.setImagePosition_(NSImageLeft)
+            b.setAlignment_(NSLeftTextAlignment)
+            b.setFont_(NSFont.systemFontOfSize_(14))
+
+            self.menu_panel.addSubview_(b)
+
+            y -= 38
+            
+    def toggleMenu_(self, sender):
+
+        self._createMenuPanel()
+
+        cv = self.window.contentView()
+        f = cv.bounds()
+
+        width = 220
+
+        if self.menu_open:
+
+            target = NSMakeRect(
+                f.size.width,
+                self.menu_panel.frame().origin.y,
+                width,
+                self.menu_panel.frame().size.height,
+            )
+
+        else:
+
+            target = NSMakeRect(
+                f.size.width - width - 10,
+                self.menu_panel.frame().origin.y,
+                width,
+                self.menu_panel.frame().size.height,
+            )
+
+        self.menu_open = not self.menu_open
+
+        def animate(ctx):
+
+            ctx.setDuration_(0.20)
+
+            self.menu_panel.animator().setFrame_(target)
+
+        NSAnimationContext.runAnimationGroup_completionHandler_(
+            animate,
+            None,
+        )
+        
+    # ==========================================================
+    # BOOKMARK MANAGER (Part 1)
+    # Creates the bookmark panel inside the hamburger menu
+    # ==========================================================
+
+    def _createBookmarksView(self):
+
+        if getattr(self, "bookmark_view", None):
+            return
+
+        # Match the menu panel height
+        self.bookmark_view = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, 220, 300)
+        )
+
+        # Back button
+        self.btn_bookmark_back = NSButton.alloc().initWithFrame_(
+            NSMakeRect(12, 264, 80, 28)
+        )
+
+        self.btn_bookmark_back.setTitle_("← Back")
+        self.btn_bookmark_back.setBordered_(False)
+        self.btn_bookmark_back.setBezelStyle_(0)
+        self.btn_bookmark_back.setAlignment_(NSLeftTextAlignment)
+        self.btn_bookmark_back.setTarget_(self)
+        self.btn_bookmark_back.setAction_("showMainMenu:")
+
+        self.bookmark_view.addSubview_(self.btn_bookmark_back)
+
+        # Title
+        title = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(95, 266, 110, 20)
+        )
+
+        title.setEditable_(False)
+        title.setBordered_(False)
+        title.setDrawsBackground_(False)
+        title.setSelectable_(False)
+        title.setStringValue_("Bookmarks")
+        title.setTextColor_(NSColor.whiteColor())
+        title.setFont_(NSFont.boldSystemFontOfSize_(14))
+
+        self.bookmark_view.addSubview_(title)
+
+        # Scroll view
+        self.bookmark_scroll = NSScrollView.alloc().initWithFrame_(
+            NSMakeRect(12, 8, 196, 240)
+        )
+
+        self.bookmark_scroll.setHasVerticalScroller_(True)
+        self.bookmark_scroll.setHasHorizontalScroller_(False)
+        self.bookmark_scroll.setAutohidesScrollers_(True)
+        self.bookmark_scroll.setBorderType_(0)
+        
+        # ----------------------------------------------------------
+        # Rounded Darkelf bookmark container
+        # ----------------------------------------------------------
+
+        self.bookmark_scroll.setWantsLayer_(True)
+
+        scroll_layer = self.bookmark_scroll.layer()
+
+        scroll_layer.setCornerRadius_(12)
+
+        scroll_layer.setMasksToBounds_(True)
+
+        scroll_layer.setBorderWidth_(1.0)
+
+        scroll_layer.setBorderColor_(
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.16,
+                0.95,
+                0.45,
+                0.12,
+            ).CGColor()
+        )
+
+        scroll_layer.setBackgroundColor_(
+            NSColor.clearColor().CGColor()
+        )
+
+        # Don't let NSScrollView paint its default background
+        self.bookmark_scroll.setDrawsBackground_(False)
+
+        self.bookmark_document = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, 196, 10)
+        )
+
+        self.bookmark_document.setWantsLayer_(True)
+
+        self.bookmark_document.layer().setBackgroundColor_(
+            NSColor.clearColor().CGColor()
+        )
+
+        self.bookmark_scroll.setDocumentView_(self.bookmark_document)
+
+        # Make the clip view transparent too
+        clip = self.bookmark_scroll.contentView()
+
+        clip.setWantsLayer_(True)
+
+        clip.layer().setBackgroundColor_(
+            NSColor.clearColor().CGColor()
+        )
+
+        self.bookmark_view.addSubview_(self.bookmark_scroll)
+
+        self.bookmark_view.setHidden_(True)
+
+        self.bookmark_view.setFrameOrigin_((0, 0))
+
+        self.menu_panel.addSubview_(self.bookmark_view)
+        
+    # ==========================================================
+    # Bookmark Toolbar Sync
+    # ==========================================================
+
+    def updateBookmarkButton(self):
+
+        if not hasattr(self, "btn_bookmark"):
+            return
 
         try:
-            if not hasattr(self, "mini_ai"):
+            if self.active < 0 or self.active >= len(self.tabs):
                 return
 
-            report_html = self._build_threat_report_html()
+            url = getattr(self.tabs[self.active], "url", "")
 
-            container_nonce = secrets.token_hex(4)
-
-            # ----------------------------
-            # 🔐 INTERNAL PAGE → STILL NEED PQ SEED
-            # ----------------------------
-            pq_seed = hashlib.sha256(os.urandom(32)).digest()
-
-            # 🔥 CREATE TAB FIRST (CRITICAL)
-            tab = Tab(
-                view=None,
-                data_store=None,
-                url="darkelf://report",
-                host="MiniAI Report",
-                title="MiniAI Report",
-                favicon=None,
-                canvas_seed=None,
-                container_nonce=container_nonce,
-                tab_uid=self._tab_uid_counter + 1,
+            bookmarked = any(
+                b.get("url") == url
+                for b in self.bookmarks
             )
 
-            tab._pq_seed = pq_seed
-            tab._pq_counter = 0
-            tab._nonce = secrets.token_hex(8)
+            symbol = "bookmark.fill" if bookmarked else "bookmark"
 
-            self._tab_uid_counter += 1
-
-            # 🔥 CREATE WEBVIEW WITH TAB
-            wk, store = self._new_wk(container_nonce, pq_seed, tab)
-
-            tab.view = wk
-            tab.data_store = store
-
-            wk.setNavigationDelegate_(self._nav_delegate)
-
-            self._mount_webview(wk)
-
-            self.tabs.append(tab)
-            self.active = len(self.tabs) - 1
-
-            wk.loadHTMLString_baseURL_(
-                report_html, NSURL.URLWithString_("darkelf://report")
+            img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+                symbol,
+                None,
             )
 
-            self._update_tab_buttons()
-            self._sync_addr()
+            self.btn_bookmark.setImage_(img)
 
         except Exception as e:
-            print("[MiniAI] Threat report open failed:", e)
+            log(2, e)
+            
+    def refreshBookmarkButton(self):
 
-    def _build_threat_report_html(self):
+        if not hasattr(self, "btn_bookmark"):
+            return
 
-        stats = self.mini_ai.get_statistics() if getattr(self, "mini_ai", None) else {}
+        url = ""
 
-        lockdown = stats.get("lockdown", {}) or {}
-        lockdown_active = bool(lockdown.get("active", False))
-        lockdown_triggered_at = float(lockdown.get("triggered_at") or 0)
+        if 0 <= self.active < len(self.tabs):
+            url = getattr(self.tabs[self.active], "url", "") or ""
 
-        now = time.time()
+        bookmarked = any(
+            b["url"] == url
+            for b in self.bookmarks
+        )
 
-        LOCKDOWN_DURATION = getattr(self.mini_ai, "LOCKDOWN_DURATION_SECONDS", 0) or 0
-        elapsed = now - (lockdown_triggered_at or now)
-        remaining = int(max(0, LOCKDOWN_DURATION - elapsed)) if lockdown_active else 0
+        symbol = "bookmark.fill" if bookmarked else "bookmark"
+
+        img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+            symbol,
+            None,
+        )
+
+        self.btn_bookmark.setImage_(img)
+        
+    # ==========================================================
+    # Toolbar Bookmark Toggle
+    # ==========================================================
+
+    def toggleBookmarkToolbar_(self, sender):
+
+        if self.active < 0 or self.active >= len(self.tabs):
+            return
+
+        url = self.tabs[self.active].url
+
+        for i, bm in enumerate(self.bookmarks):
+            if bm.get("url") == url:
+    
+                del self.bookmarks[i]
+
+                self._saveBookmarks()
+                self._reloadBookmarkList()
+                self.updateBookmarkButton()
+
+                return
+
+        title = getattr(self.tabs[self.active], "title", "") or url
+
+        self.bookmarks.append({
+            "title": title,
+            "url": url,
+        })
+
+        self._saveBookmarks()
+        self._reloadBookmarkList()
+        self.updateBookmarkButton()
+    
+    # ==========================================================
+    # Show Bookmark View
+    # ==========================================================
+
+    def showBookmarks_(self, sender):
+
+        if not getattr(self, "bookmark_view", None):
+            self._createBookmarksView()
+
+        # Hide main menu buttons
+        for b in (
+            self.btn_bookmarks,
+            self.btn_add_bookmark,
+            self.btn_mini_ai,
+            self.btn_nuke,
+            self.btn_js,
+            self.btn_hotkeys,
+            self.btn_about,
+        ):
+            b.setHidden_(True)
+
+        # Bring bookmark view to the front every time
+        self.bookmark_view.removeFromSuperview()
+        self.menu_panel.addSubview_(self.bookmark_view)
+
+        self.bookmark_view.setHidden_(False)
+
+        green = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            0.20,
+            0.95,
+            0.35,
+            1.0,
+        )
+
+        self.btn_bookmarks.setContentTintColor_(green)
+
+        self._reloadBookmarkList()
+        
+    # ==========================================================
+    # Return to Main Menu
+    # ==========================================================
+
+    def showMainMenu_(self, sender):
+
+        if getattr(self, "bookmark_view", None):
+            self.bookmark_view.setHidden_(True)
+
+        if getattr(self, "shortcut_view", None):
+            self.shortcut_view.setHidden_(True)
+            
+        if getattr(self, "mini_ai_view", None):
+            self.mini_ai_view.setHidden_(True)
+            
+        if getattr(self, "about_view", None):
+            self.about_view.setHidden_(True)
+
+        for b in (
+            self.btn_bookmarks,
+            self.btn_add_bookmark,
+            self.btn_hotkeys,
+            self.btn_mini_ai,
+            self.btn_nuke,
+            self.btn_js,
+            self.btn_about,
+        ):
+            b.setHidden_(False)
+    
+    # ==========================================================
+    # Reload Bookmark List
+    # ==========================================================
+
+    def _reloadBookmarkList(self):
+
+        if not getattr(self, "bookmark_document", None):
+            return
+
+        for view in list(self.bookmark_document.subviews()):
+            view.removeFromSuperview()
+
+        bookmarks = getattr(self, "bookmarks", [])
+
+        row_height = 34
+        padding = 6
+        top_margin = 10
+
+        if not bookmarks:
+
+            self.bookmark_document.setFrame_(
+                NSMakeRect(0, 0, 196, 170)
+            )
+
+            lbl = NSTextField.alloc().initWithFrame_(
+                NSMakeRect(10, 126, 170, 24)
+            )
+
+            lbl.setBordered_(False)
+            lbl.setEditable_(False)
+            lbl.setSelectable_(False)
+            lbl.setDrawsBackground_(False)
+            lbl.setAlignment_(NSLeftTextAlignment)
+            lbl.setTextColor_(NSColor.systemGrayColor())
+            lbl.setStringValue_("No bookmarks yet.")
+
+            self.bookmark_document.addSubview_(lbl)
+            return
+
+        total_height = len(bookmarks) * (row_height + padding) + top_margin
+        doc_height = max(240, total_height)
+
+        self.bookmark_document.setFrame_(
+            NSMakeRect(
+                0,
+                0,
+                196,
+                doc_height,
+            )
+        )
+
+        # Start just below the top of the document
+        y = doc_height - row_height - top_margin
+
+        for index, bm in enumerate(bookmarks):
+
+            title = bm.get("title") or bm.get("url", "")
+
+            btn = NSButton.alloc().initWithFrame_(
+                NSMakeRect(10, y, 150, row_height)
+            )
+
+            btn.setBordered_(False)
+            btn.setBezelStyle_(0)
+            btn.setAlignment_(NSLeftTextAlignment)
+            btn.setTitle_(title[:32])
+            btn.setTag_(index)
+            btn.setTarget_(self)
+            btn.setAction_("openBookmark:")
+
+            self.bookmark_document.addSubview_(btn)
+
+            delete = NSButton.alloc().initWithFrame_(
+                NSMakeRect(166, y + 5, 24, 24)
+            )
+
+            delete.setBordered_(False)
+            delete.setBezelStyle_(0)
+            delete.setTitle_("✕")
+            delete.setTag_(index)
+            delete.setTarget_(self)
+            delete.setAction_("deleteBookmark:")
+
+            self.bookmark_document.addSubview_(delete)
+
+            y -= (row_height + padding)
+            
+    # ==========================================================
+    # Delete Bookmark
+    # ==========================================================
+
+    def deleteBookmark_(self, sender):
 
         try:
-            seed_stats_json = json.dumps(stats)
-        except Exception:
-            seed_stats_json = "{}"
 
-        # Precompute badge color
-        badge_bg = "#ff3b30" if lockdown_active else "#36ff9a"
-        badge_text = "LOCKDOWN ACTIVE" if lockdown_active else "SYSTEM MONITORING"
+            index = sender.tag()
 
-        # Timer block shows only when active
-        timer_block = ""
-        if lockdown_active:
-            timer_block = f"""
-            <div class="countdown-timer">
-                Lockdown ends in <span id="lockdown_timer">{remaining}</span>s
-            </div>
-            """
+            if index < 0 or index >= len(self.bookmarks):
+                return
 
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Darkelf MiniAI Activity Console</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+            del self.bookmarks[index]
 
-  <style>
-    :root{{
-      --bg:#05060a;
-      --accent:#36ff9a;
-      --accent2:#00eaff;
-      --accent3:#b400ff;
-      --card:rgba(255,255,255,.05);
-      --muted:#9db0be;
-      --danger:#ff3b30;
-      --ok:#36ff9a;
-      --border:rgba(255,255,255,.08);
-    }}
+            self._saveBookmarks()
 
-    *{{ box-sizing:border-box; }}
+            self._reloadBookmarkList()
 
-    body{{
-      margin:0;
-      font-family:system-ui,-apple-system;
-      background:
-        radial-gradient(1200px 800px at 15% -10%, rgba(0,234,255,.35), transparent 70%),
-        radial-gradient(900px 600px at 110% 0%, rgba(54,255,154,.35), transparent 70%),
-        radial-gradient(1200px 700px at 50% 120%, rgba(180,0,255,.35), transparent 70%),
-        var(--bg);
-      color:#eef2f6;
-    }}
+        except Exception as e:
+            print("[Bookmarks]", e)
+            
+    def _createShortcutView(self):
 
-    .container{{
-      max-width:1300px;
-      margin:auto;
-      padding:70px 24px;
-    }}
+        if getattr(self, "shortcut_view", None):
+            return
 
-    .title{{
-      font-size:1.8rem;
-      font-weight:900;
-      letter-spacing:.15em;
-      background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3));
-      -webkit-background-clip:text;
-      -webkit-text-fill-color:transparent;
-    }}
+        # Match menu panel size
+        self.shortcut_view = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, 220, 300)
+        )
 
-    .badge{{
-      display:inline-flex;
-      margin-top:14px;
-      padding:8px 16px;
-      border-radius:999px;
-      font-size:.7rem;
-      font-weight:800;
-      letter-spacing:.15em;
-      background:{badge_bg};
-      color:#000;
-    }}
+        # --------------------------------------------------
+        # Back button
+        # --------------------------------------------------
+        self.btn_shortcut_back = NSButton.alloc().initWithFrame_(
+            NSMakeRect(12, 264, 80, 28)
+        )
 
-    .countdown-timer{{
-      margin-top:14px;
-      font-size:1.2rem;
-      color:var(--danger);
-      font-weight:700;
-    }}
+        self.btn_shortcut_back.setTitle_("← Back")
+        self.btn_shortcut_back.setBordered_(False)
+        self.btn_shortcut_back.setBezelStyle_(0)
+        self.btn_shortcut_back.setAlignment_(NSLeftTextAlignment)
+        self.btn_shortcut_back.setTarget_(self)
+        self.btn_shortcut_back.setAction_("showMainMenu:")
 
-    .cards{{
-     margin-top:60px;
-     display:grid;
-     grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-     gap:36px;
-    }}
+        self.shortcut_view.addSubview_(self.btn_shortcut_back)
 
-    @media (max-width: 1100px) {{
-      .cards{{ grid-template-columns:repeat(2, minmax(0, 1fr)); }}
-    }}
+        # --------------------------------------------------
+        # Title
+        # --------------------------------------------------
+        self.shortcut_title = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(95, 266, 110, 20)
+        )
 
-    @media (max-width: 720px) {{
-      .cards{{ grid-template-columns:1fr; }}
-      .container{{ padding:34px 16px; }}
-    }}
+        self.shortcut_title.setEditable_(False)
+        self.shortcut_title.setBordered_(False)
+        self.shortcut_title.setDrawsBackground_(False)
+        self.shortcut_title.setSelectable_(False)
+        self.shortcut_title.setStringValue_("Keyboard Shortcuts")
+        self.shortcut_title.setTextColor_(NSColor.whiteColor())
+        self.shortcut_title.setFont_(NSFont.boldSystemFontOfSize_(14))
 
-    .card{{
-      background:var(--card);
-      backdrop-filter:blur(20px);
-      padding:30px;
-      border-radius:18px;
-      border:1px solid var(--border);
-      box-shadow:
-        0 30px 60px rgba(0,0,0,.6),
-        0 0 40px rgba(0,234,255,.15);
-      min-height: 220px;
-    }}
+        self.shortcut_view.addSubview_(self.shortcut_title)
 
-    .section-title{{
-      font-size:.75rem;
-      letter-spacing:.25em;
-      text-transform:uppercase;
-      color:var(--muted);
-      margin-bottom:20px;
-    }}
+        # --------------------------------------------------
+        # Scroll View
+        # --------------------------------------------------
+        self.shortcut_scroll = NSScrollView.alloc().initWithFrame_(
+            NSMakeRect(12, 8, 196, 240)
+        )
 
-    .line{{
-      display:grid;
-      grid-template-columns:28px auto max-content;
-      column-gap:14px;
-      align-items:center;
-      margin:12px 0;
-    }}
+        self.shortcut_scroll.setHasVerticalScroller_(True)
+        self.shortcut_scroll.setHasHorizontalScroller_(False)
+        self.shortcut_scroll.setAutohidesScrollers_(True)
+        self.shortcut_scroll.setBorderType_(0)
 
-    .icon{{ color:var(--accent2); }}
+        self.shortcut_scroll.setWantsLayer_(True)
 
-    .stat-value{{ font-weight:900; }}
+        scroll_layer = self.shortcut_scroll.layer()
 
-    .dummy-card{{
-      opacity:.5;
-      border-style:dashed;
-    }}
+        scroll_layer.setCornerRadius_(12)
+        scroll_layer.setMasksToBounds_(True)
+        scroll_layer.setBorderWidth_(1.0)
 
-    .log{{
-      margin-top:60px;
-      background:rgba(0,0,0,.45);
-      padding:30px;
-      border-radius:14px;
-      font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size:.85rem;
-      max-height:260px;
-      overflow:auto;
-      border:1px solid rgba(255,255,255,.06);
-    }}
+        scroll_layer.setBorderColor_(
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.16,
+                0.95,
+                0.45,
+                0.12,
+            ).CGColor()
+        )
 
-    .log-entry{{
-      margin:8px 0;
-      color:#ff9a9a;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }}
+        scroll_layer.setBackgroundColor_(
+            NSColor.clearColor().CGColor()
+        )
 
-    .footer{{
-      margin-top:60px;
-      text-align:center;
-      font-size:.8rem;
-      color:var(--muted);
-    }}
+        self.shortcut_scroll.setDrawsBackground_(False)
 
-    .top-row{{
-      display:flex;
-      justify-content:space-between;
-      gap:16px;
-      align-items:flex-end;
-      flex-wrap:wrap;
-    }}
+        self.shortcut_document = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, 196, 10)
+        )
 
-    .subtle{{
-      color: var(--muted);
-      font-size: .9rem;
-      margin-top: 8px;
-    }}
+        self.shortcut_document.setWantsLayer_(True)
 
-    .pill{{
-      display:inline-flex;
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.1);
-      background:rgba(255,255,255,.03);
-      font-size:.75rem;
-      color: var(--muted);
-    }}
-  </style>
-</head>
+        self.shortcut_document.layer().setBackgroundColor_(
+            NSColor.clearColor().CGColor()
+        )
 
-<body>
-  <div class="container">
-    <div class="top-row">
-      <div>
-        <div class="title">Darkelf MiniAI Activity Console</div>
-        <div class="badge" id="status_badge">{badge_text}</div>
-        {timer_block}
-        <div class="subtle">
-          Live view (updates every <span class="pill">2s</span>). No full page reload.
-        </div>
-      </div>
+        self.shortcut_scroll.setDocumentView_(self.shortcut_document)
 
-      <div class="pill" id="last_updated">Last updated: --</div>
-    </div>
+        clip = self.shortcut_scroll.contentView()
 
-    <div class="cards">
+        clip.setWantsLayer_(True)
 
-      <!-- Session Metrics -->
-      <div class="card">
-        <div class="section-title">Session Metrics</div>
+        clip.layer().setBackgroundColor_(
+            NSColor.clearColor().CGColor()
+        )
 
-        <div class="line">
-          <i class="bi bi-clock-history icon"></i>
-          <span>Session Uptime</span>
-          <span class="stat-value" id="uptime_seconds">0.0s</span>
-        </div>
+        self.shortcut_view.addSubview_(self.shortcut_scroll)
 
-        <div class="line">
-          <i class="bi bi-activity icon"></i>
-          <span>Total Events</span>
-          <span class="stat-value" id="total_events">0</span>
-        </div>
+        self.shortcut_view.setHidden_(True)
+        self.shortcut_view.setFrameOrigin_((0, 0))
 
-        <div class="line">
-          <i class="bi bi-globe icon"></i>
-          <span>Unique Domains</span>
-          <span class="stat-value" id="unique_domains">0</span>
-        </div>
-
-        <div class="line">
-          <i class="bi bi-shield-exclamation icon"></i>
-          <span>Threat Score</span>
-          <span class="stat-value" id="threat_score">0</span>
-        </div>
-      </div>
-      
-      <!-- Network Activity -->
-      <div class="card">
-        <div class="section-title">Network Activity</div>
-
-        <div class="line">
-          <i class="bi bi-diagram-3 icon"></i>
-          <span>Total Requests</span>
-          <span class="stat-value" id="net_total">0</span>
-        </div>
-
-        <div class="line">
-          <i class="bi bi-lightning-charge icon"></i>
-          <span>Dynamic Requests</span>
-          <span class="stat-value" id="net_dynamic">0</span>
-        </div>
-
-        <div class="line">
-          <i class="bi bi-image icon"></i>
-          <span>Static Assets</span>
-          <span class="stat-value" id="net_static">0</span>
-        </div>
-
-        <div class="line">
-          <i class="bi bi-globe2 icon"></i>
-          <span>Domains Contacted</span>
-          <span class="stat-value" id="net_domains">0</span>
-        </div>
-
-       </div>
-       
-       <!-- Traffic Breakdown -->
-       <div class="card">
-         <div class="section-title">Traffic Breakdown</div>
-
-         <div class="line">
-           <i class="bi bi-bar-chart-line icon"></i>
-           <span>Dynamic / Static Ratio</span>
-           <span class="stat-value" id="tb_ratio">0 : 0</span>
-         </div>
-
-         <div class="line">
-           <i class="bi bi-diagram-3 icon"></i>
-           <span>Requests / Domain</span>
-           <span class="stat-value" id="tb_req_domain">0</span>
-         </div>
-
-         <div class="line">
-           <i class="bi bi-speedometer2 icon"></i>
-           <span>Requests / Second</span>
-           <span class="stat-value" id="tb_rps">0</span>
-         </div>
-
-         <div class="line">
-           <i class="bi bi-activity icon"></i>
-           <span>Recent Events</span>
-           <span class="stat-value" id="tb_recent">0</span>
-         </div>
-       </div>
-
-        <!-- System Status -->
-        <div class="card">
-          <div class="section-title">System Status</div>
-
-          <div class="line">
-            <i class="bi bi-cpu icon"></i>
-            <span>MiniAI Engine</span>
-            <span class="stat-value" id="sys_ai">ACTIVE</span>
-          </div>
-
-        <div class="line">
-          <i class="bi bi-shield-check icon"></i>
-          <span>Tracker Filters</span>
-          <span class="stat-value" id="sys_filters">LOADED</span>
-        </div>
-
-        <div class="line">
-          <i class="bi bi-lock icon"></i>
-          <span>Isolation Mode</span>
-          <span class="stat-value" id="sys_isolation">ENABLED</span>
-        </div>
-
-        <div class="line">
-          <i class="bi bi-hdd-network icon"></i>
-          <span>Ephemeral Storage</span>
-          <span class="stat-value" id="sys_storage">MEMORY</span>
-        </div>
+        self.menu_panel.addSubview_(self.shortcut_view)
         
-        <div class="line">
-          <i class="bi bi-cpu icon"></i>
-          <span>PQ Risk</span>
-          <span class="stat-value" id="pq-risk">LOW</span>
-        </div>           
-      </div>
-       
-      <!-- System Analysis -->
-      <div class="card">
-        <div class="section-title">System Analysis</div>
+    def _reloadShortcutList(self):
 
-        <div class="line">
-          <i class="bi bi-crosshair icon"></i>
-          <span>Trackers</span>
-          <span class="stat-value" id="th_trackers">0</span>
-        </div>
+        if not getattr(self, "shortcut_document", None):
+            return
 
-        <div class="line">
-          <i class="bi bi-bullseye icon"></i>
-          <span>Intrusions</span>
-          <span class="stat-value" id="th_intrusions">0</span>
-        </div>
+        for view in list(self.shortcut_document.subviews()):
+            view.removeFromSuperview()
 
-        <div class="line">
-          <i class="bi bi-bug icon"></i>
-          <span>Malware</span>
-          <span class="stat-value" id="th_malware">0</span>
-        </div>
+        row_height = 28
+        header_height = 30
+        padding = 4
+        width = 196
 
-        <div class="line">
-          <i class="bi bi-lightning icon"></i>
-          <span>Exploits</span>
-          <span class="stat-value" id="th_exploits">0</span>
-        </div>
-                
-        <div class="line">
-          <i class="bi bi-fingerprint icon"></i>
-          <span>Fingerprinting</span>
-          <span class="stat-value" id="th_fingerprinting">0</span>
-        </div>
-      </div>
+        # --------------------------------------------------
+        # Calculate document height first
+        # --------------------------------------------------
 
-      <!-- IDS Engine -->
-      <div class="card">
-        <div class="section-title">MiniAI IDS Engine</div>
+        total_height = 10
 
-        <div class="line">
-          <i class="bi bi-robot icon"></i>
-          <span>Scraping Bots</span>
-          <span class="stat-value" id="ids_scrapers">0</span>
-        </div>
+        for section, items in self.shortcut_sections.items():
 
-        <div class="line">
-          <i class="bi bi-key icon"></i>
-          <span>Credential Stuffing</span>
-          <span class="stat-value" id="ids_credential_stuffing">0</span>
-        </div>
+            total_height += header_height + padding
 
-        <div class="line">
-          <i class="bi bi-search icon"></i>
-          <span>Vulnerability Scanners</span>
-          <span class="stat-value" id="ids_vulnerability_scanners">0</span>
-        </div>
+            if self.shortcut_expanded.get(section, True):
+                total_height += len(items) * row_height
 
-        <div class="line">
-          <i class="bi bi-shield-lock icon"></i>
-          <span>Bruteforce Logins</span>
-          <span class="stat-value" id="ids_bruteforce_logins">0</span>
-        </div>
-      </div>
+            total_height += 4
 
-    </div>
+        total_height = max(240, total_height + 10)
 
-    <div class="log">
-      <b>Recent Threats</b>
-      <div id="recent_threats"></div>
-    </div>
+        self.shortcut_document.setFrame_(
+            NSMakeRect(
+                0,
+                0,
+                width,
+                total_height,
+            )
+        )
 
-    <div class="footer">
-      Darkelf Browser • MiniAI Sentinel • Hardened Runtime
-    </div>
-  </div>
+        # --------------------------------------------------
+        # Layout from TOP downward
+        # --------------------------------------------------
 
-  <script>
-    // ---------- seed ----------
-    const SEED_STATS = {seed_stats_json};
+        y = total_height - 10 - header_height
 
-    // ---------- helpers ----------
-    function el(id) {{ return document.getElementById(id); }}
-    function setText(id, v) {{
-      const n = el(id);
-      if (!n) return;
-      n.textContent = (v === undefined || v === null) ? "" : String(v);
-    }}
+        for idx, (section, items) in enumerate(self.shortcut_sections.items()):
 
-    function formatUptimeSeconds(x) {{
-      const n = Number(x || 0);
-      return n.toFixed(1) + "s";
-    }}
+            expanded = self.shortcut_expanded.get(section, True)
 
-    // Safer rendering (no innerHTML from untrusted data)
-    function renderRecentThreats(items) {{
-      const container = el("recent_threats");
-      if (!container) return;
-      container.innerHTML = "";
-      (items || []).slice(0, 50).forEach(e => {{
-        const div = document.createElement("div");
-        div.className = "log-entry";
-        const dt = (e && e.datetime) ? e.datetime : "";
-        const url = (e && e.url) ? e.url : "";
-        div.textContent = dt + " — " + url;
-        container.appendChild(div);
-      }});
-    }}
+            header = NSButton.alloc().initWithFrame_(
+                NSMakeRect(
+                    8,
+                    y,
+                    width - 16,
+                    header_height,
+                )
+            )
 
-    // ---------- countdown ----------
-    // Keep a local countdown that will be corrected on each poll.
-    let lockdownRemaining = null;
-    function tickCountdown() {{
-      const t = el("lockdown_timer");
-      if (!t) return;
+            header.setBordered_(False)
+            header.setBezelStyle_(0)
+            header.setAlignment_(NSLeftTextAlignment)
+            header.setTitle_(("▼ " if expanded else "▶ ") + section)
+            header.setTag_(idx)
+            header.setTarget_(self)
+            header.setAction_("toggleShortcutSection:")
 
-      if (lockdownRemaining === null) return;
-      if (lockdownRemaining > 0) {{
-        lockdownRemaining -= 1;
-        t.textContent = String(lockdownRemaining);
-      }}
-    }}
-    setInterval(tickCountdown, 1000);
+            self.shortcut_document.addSubview_(header)
 
-    // ---------- apply stats ----------
-    function applyStats(stats) {{
-      stats = stats || {{}};
+            y -= header_height + padding
 
-      // Basic metrics
-      setText("uptime_seconds", formatUptimeSeconds(stats.uptime_seconds));
-      setText("total_events", stats.total_events || 0);
-      setText("unique_domains", stats.unique_domains || 0);
-      setText("threat_score", stats.threat_score || 0);
+            if expanded:
 
-      // Network stats
-      const net = stats.network || {{}};
-      setText("unique_domains", net.unique_domains || 0);
-      setText("net_total", net.total_requests || 0);
-      setText("net_dynamic", net.dynamic_requests || 0);
-      setText("net_static", net.static_requests || 0);
-      setText("net_domains", net.unique_domains || 0);
+                for keys, desc in items:
 
-      // Threats
-      const th = stats.threats || {{}};
-      setText("th_trackers", th.trackers || 0);
-      setText("th_intrusions", th.intrusions || 0);
-      setText("th_malware", th.malware || 0);
-      setText("th_exploits", th.exploits || 0);
-      setText("th_fingerprinting", th.fingerprinting || 0);
-      
-      // -----------------------------
-      // PQ Risk (NEW)
-      // -----------------------------
-      const pq = stats.pq || {{}};
-      const pqRisk = pq.risk_level || "low";
+                    key = NSTextField.alloc().initWithFrame_(
+                        NSMakeRect(
+                            22,
+                            y + 3,
+                            60,
+                            22,
+                        )
+                    )
 
-      const pqEl = document.getElementById("pq-risk");
+                    key.setBordered_(False)
+                    key.setEditable_(False)
+                    key.setSelectable_(False)
+                    key.setDrawsBackground_(False)
+                    key.setTextColor_(NSColor.systemGreenColor())
+                    key.setFont_(
+                        NSFont.monospacedSystemFontOfSize_weight_(12, 5)
+                    )
+                    key.setStringValue_(keys)
 
-      if (pqEl) {{
-        pqEl.textContent = pqRisk.toUpperCase();
+                    self.shortcut_document.addSubview_(key)
 
-        if (pqRisk === "high") {{
-          pqEl.style.color = "#ff3b30";
-        }} else if (pqRisk === "medium") {{
-          pqEl.style.color = "#ffcc00";
-        }} else {{
-          pqEl.style.color = "#36ff9a";
-        }}
-      }}
-      
-      // IDS
-      const ids = stats.ids || {{}};
-      setText("ids_scrapers", ids.scrapers || 0);
-      setText("ids_credential_stuffing", ids.credential_stuffing || 0);
-      setText("ids_vulnerability_scanners", ids.vulnerability_scanners || 0);
-      setText("ids_bruteforce_logins", ids.bruteforce_logins || 0);
-      
-      // Traffic Breakdown 
-      const dyn = net.dynamic_requests || 0;
-      const stat = net.static_requests || 0;
-      const domains = net.unique_domains || 1;
-      const total = net.total_requests || 0;
-      const uptime = stats.uptime_seconds || 1;
+                    label = NSTextField.alloc().initWithFrame_(
+                        NSMakeRect(
+                            82,
+                            y + 3,
+                            100,
+                            22,
+                        )
+                    )
 
-      setText("tb_ratio", dyn + " : " + stat);
-      setText("tb_req_domain", (total / domains).toFixed(1));
-      setText("tb_rps", (total / uptime).toFixed(2));
-      setText("tb_recent", stats.total_events || 0);
+                    label.setBordered_(False)
+                    label.setEditable_(False)
+                    label.setSelectable_(False)
+                    label.setDrawsBackground_(False)
+                    label.setTextColor_(NSColor.whiteColor())
+                    label.setStringValue_(desc)
 
-      // Recent threats
-      renderRecentThreats(stats.recent_threats || []);
+                    self.shortcut_document.addSubview_(label)
 
-      // Lockdown status + badge
-      const lockdown = stats.lockdown || {{}};
-      const active = !!lockdown.active;
+                    y -= row_height
 
-      const badge = el("status_badge");
-      if (badge) {{
-        badge.textContent = active ? "LOCKDOWN ACTIVE" : "SYSTEM MONITORING";
-        badge.style.background = active ? "{'#ff3b30'}" : "{'#36ff9a'}";
-        badge.style.color = "#000";
-      }}
+            y -= 4
+            
+    # ==========================================================
+    # MiniAI Summary Menu
+    # ==========================================================
 
-      // Countdown node handling:
-      // If lockdown becomes active, ensure timer exists; if becomes inactive, remove it.
-      const existingTimer = el("lockdown_timer");
-      if (active) {{
-        // compute remaining based on server-ish timestamps
-        const triggeredAt = Number(lockdown.triggered_at || 0);
-        const duration = Number(lockdown.duration_seconds || {LOCKDOWN_DURATION} || 0);
+    def _createMiniAIView(self):
 
-        // We'll accept either:
-        // - backend provides duration_seconds
-        // - fallback to embedded LOCKDOWN_DURATION
-        const nowSec = Date.now() / 1000;
-        let rem = Math.max(0, Math.floor(duration - (nowSec - triggeredAt)));
-        lockdownRemaining = rem;
+        if getattr(self, "mini_ai_view", None):
+            return
 
-        if (!existingTimer) {{
-          // create timer block
-          const container = badge ? badge.parentElement : document.body;
-          const div = document.createElement("div");
-          div.className = "countdown-timer";
-          div.innerHTML = 'Lockdown ends in <span id="lockdown_timer"></span>s';
-          container.appendChild(div);
-        }}
-        setText("lockdown_timer", lockdownRemaining);
-      }} else {{
-        lockdownRemaining = null;
-        // remove timer block if present
-        if (existingTimer) {{
-          const parent = existingTimer.closest(".countdown-timer");
-          if (parent) parent.remove();
-        }}
-      }}
+        # --------------------------------------------------
+        # Main Panel
+        # --------------------------------------------------
 
-      // Last updated
-      const lu = el("last_updated");
-      if (lu) {{
-        const d = new Date();
-        lu.textContent = "Last updated: " + d.toLocaleTimeString();
-      }}
-    }}
+        panel = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, 220, 300)
+        )
 
-    // First paint
-    applyStats(SEED_STATS);
+        panel.setHidden_(True)
 
-    // ---------- live polling ----------
-    // IMPORTANT: implement in your _NavDelegate:
-    // If URL is darkelf://report?json=1, return JSON string of self.mini_ai.get_statistics()
-    async function poll() {{
-      try {{
-        const res = await fetch("darkelf://report?json=1", {{
-          cache: "no-store",
-          credentials: "omit"
-        }});
-        const txt = await res.text();
-        const data = JSON.parse(txt);
-        applyStats(data);
-      }} catch (e) {{
-        // If fetch is blocked by your scheme handler, you can replace this with:
-        // - message handler bridge, or
-        // - WKURLSchemeHandler, or
-        // - injected script via evaluateJavaScript_ from native side.
-      }}
-    }}
+        # --------------------------------------------------
+        # Back
+        # --------------------------------------------------
 
-    setInterval(poll, 2000);
-  </script>
-</body>
-</html>
-"""
+        back = NSButton.alloc().initWithFrame_(
+            NSMakeRect(12, 264, 80, 28)
+        )
 
+        back.setTitle_("← Back")
+        back.setBordered_(False)
+        back.setBezelStyle_(0)
+        back.setAlignment_(NSLeftTextAlignment)
+        back.setTarget_(self)
+        back.setAction_("showMainMenu:")
+
+        panel.addSubview_(back)
+
+        # --------------------------------------------------
+        # Title
+        # --------------------------------------------------
+
+        title = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(90, 266, 120, 20)
+        )
+
+        title.setEditable_(False)
+        title.setBordered_(False)
+        title.setDrawsBackground_(False)
+        title.setSelectable_(False)
+        title.setFont_(NSFont.boldSystemFontOfSize_(15))
+        title.setTextColor_(NSColor.whiteColor())
+        title.setStringValue_("MiniAI")
+
+        panel.addSubview_(title)
+
+        # --------------------------------------------------
+        # Helper
+        # --------------------------------------------------
+
+        def add_row(y, text):
+
+            lbl = NSTextField.alloc().initWithFrame_(
+                NSMakeRect(18, y, 110, 18)
+            )
+
+            lbl.setEditable_(False)
+            lbl.setBordered_(False)
+            lbl.setDrawsBackground_(False)
+            lbl.setSelectable_(False)
+            lbl.setFont_(NSFont.systemFontOfSize_(12))
+            lbl.setTextColor_(NSColor.systemGrayColor())
+            lbl.setStringValue_(text)
+
+            panel.addSubview_(lbl)
+
+            value = NSTextField.alloc().initWithFrame_(
+                NSMakeRect(135, y, 65, 18)
+            )
+
+            value.setEditable_(False)
+            value.setBordered_(False)
+            value.setDrawsBackground_(False)
+            value.setSelectable_(False)
+            value.setAlignment_(2)
+            value.setFont_(NSFont.boldSystemFontOfSize_(12))
+            value.setTextColor_(NSColor.whiteColor())
+            value.setStringValue_("-")
+
+            panel.addSubview_(value)
+
+            return value
+
+        # --------------------------------------------------
+        # Stats
+        # --------------------------------------------------
+
+        y = 225
+
+        self.lbl_ai_status      = add_row(y, "Status");          y -= 25
+        self.lbl_ai_risk        = add_row(y, "Threat Level");    y -= 25
+        self.lbl_ai_requests    = add_row(y, "Requests");        y -= 25
+        self.lbl_ai_trackers    = add_row(y, "Trackers");        y -= 25
+        self.lbl_ai_fp          = add_row(y, "Fingerprinting");  y -= 25
+        self.lbl_ai_intrusions  = add_row(y, "Intrusions");      y -= 25
+        self.lbl_ai_http        = add_row(y, "HTTP Blocks");     y -= 25
+        self.lbl_ai_pq          = add_row(y, "PQ Identity");     y -= 25
+        self.lbl_ai_lockdown    = add_row(y, "Lockdown")
+
+        self.mini_ai_view = panel
+
+        self.menu_panel.addSubview_(panel)
+        
+    # ==========================================================
+    # About Darkelf View
+    # ==========================================================
+
+    def _createAboutView(self):
+
+        if getattr(self, "about_view", None):
+            return
+
+        panel = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, 220, 300)
+        )
+
+        panel.setHidden_(True)
+
+        # --------------------------------------------------
+        # Back
+        # --------------------------------------------------
+
+        back = NSButton.alloc().initWithFrame_(
+            NSMakeRect(12, 264, 80, 28)
+        )
+
+        back.setTitle_("← Back")
+        back.setBordered_(False)
+        back.setBezelStyle_(0)
+        back.setAlignment_(NSLeftTextAlignment)
+        back.setTarget_(self)
+        back.setAction_("showMainMenu:")
+
+        panel.addSubview_(back)
+
+        # --------------------------------------------------
+        # Title
+        # --------------------------------------------------
+
+        title = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(88, 266, 120, 20)
+        )
+
+        title.setEditable_(False)
+        title.setBordered_(False)
+        title.setDrawsBackground_(False)
+        title.setSelectable_(False)
+        title.setFont_(NSFont.boldSystemFontOfSize_(14))
+        title.setTextColor_(NSColor.whiteColor())
+        title.setAlignment_(1)
+        title.setStringValue_("About")
+
+        panel.addSubview_(title)
+
+        # --------------------------------------------------
+        # Browser Name
+        # --------------------------------------------------
+
+        name = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(15, 220, 190, 22)
+        )
+
+        name.setEditable_(False)
+        name.setBordered_(False)
+        name.setDrawsBackground_(False)
+        name.setSelectable_(False)
+        name.setAlignment_(1)
+        name.setFont_(NSFont.boldSystemFontOfSize_(15))
+        name.setTextColor_(NSColor.systemGreenColor())
+        name.setStringValue_("Darkelf Cocoa Browser")
+
+        panel.addSubview_(name)
+
+        # --------------------------------------------------
+        # Version
+        # --------------------------------------------------
+
+        version = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(15, 198, 190, 18)
+        )
+
+        version.setEditable_(False)
+        version.setBordered_(False)
+        version.setDrawsBackground_(False)
+        version.setSelectable_(False)
+        version.setAlignment_(1)
+        version.setFont_(NSFont.systemFontOfSize_(12))
+        version.setTextColor_(NSColor.whiteColor())
+        version.setStringValue_("Version 7.0.4")
+
+        panel.addSubview_(version)
+
+        # --------------------------------------------------
+        # Description
+        # --------------------------------------------------
+
+        desc = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(15, 135, 190, 55)
+        )
+
+        desc.setEditable_(False)
+        desc.setBordered_(False)
+        desc.setDrawsBackground_(False)
+        desc.setSelectable_(False)
+        desc.setAlignment_(1)
+        desc.setFont_(NSFont.systemFontOfSize_(12))
+        desc.setTextColor_(NSColor.systemGrayColor())
+        desc.setStringValue_(
+            "Privacy-first browser\n"
+            "built by\n"
+            "Darkelf Labs"
+        )
+
+        panel.addSubview_(desc)
+
+        # --------------------------------------------------
+        # Website
+        # --------------------------------------------------
+
+        website = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(15, 95, 190, 18)
+        )
+
+        website.setEditable_(False)
+        website.setBordered_(False)
+        website.setDrawsBackground_(False)
+        website.setSelectable_(False)
+        website.setAlignment_(1)
+        website.setFont_(NSFont.systemFontOfSize_(12))
+        website.setTextColor_(NSColor.systemGreenColor())
+        website.setStringValue_("darkelfbrowser.com")
+
+        panel.addSubview_(website)
+
+        # --------------------------------------------------
+        # Copyright
+        # --------------------------------------------------
+
+        copyright = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(15, 35, 190, 35)
+        )
+
+        copyright.setEditable_(False)
+        copyright.setBordered_(False)
+        copyright.setDrawsBackground_(False)
+        copyright.setSelectable_(False)
+        copyright.setAlignment_(1)
+        copyright.setFont_(NSFont.systemFontOfSize_(11))
+        copyright.setTextColor_(NSColor.systemGrayColor())
+        copyright.setStringValue_(
+            "© 2025\nDr. Kevin Moore"
+        )
+
+        panel.addSubview_(copyright)
+
+        self.about_view = panel
+
+        self.menu_panel.addSubview_(panel)
+        
+    @objc.IBAction
+    def showAboutView_(self, sender):
+
+        try:
+            # Create page once
+            if not getattr(self, "about_view", None):
+                self._createAboutView()
+
+            # Hide main menu buttons
+            for v in (
+                self.btn_bookmarks,
+                self.btn_add_bookmark,
+                self.btn_hotkeys,
+                self.btn_js,
+                self.btn_nuke,
+                self.btn_mini_ai,
+                self.btn_about,
+            ):
+                try:
+                    v.setHidden_(True)
+                except Exception as e:
+                    print("[About] Hide button:", e)
+
+            # Hide other menu pages
+            try:
+                if getattr(self, "bookmark_view", None):
+                    self.bookmark_view.setHidden_(True)
+            except Exception as e:
+                print("[About] Hide bookmarks:", e)
+
+            try:
+                if getattr(self, "shortcut_view", None):
+                    self.shortcut_view.setHidden_(True)
+            except Exception as e:
+                print("[About] Hide shortcuts:", e)
+
+            try:
+                if getattr(self, "mini_ai_view", None):
+                    self.mini_ai_view.setHidden_(True)
+            except Exception as e:
+                print("[About] Hide MiniAI:", e)
+
+            # Show About page
+            self.about_view.setHidden_(False)
+
+            # Force redraw
+            self.menu_panel.setNeedsDisplay_(True)
+            self.menu_panel.displayIfNeeded()
+
+        except Exception as e:
+            print("[showAboutView_]", e)
+        
+    # ==========================================================
+    # Show MiniAI Summary
+    # ==========================================================
+
+    def showMiniAI_(self, sender):
+
+        try:
+            # Create page once
+            if not getattr(self, "mini_ai_view", None):
+                self._createMiniAIView()
+
+            # Hide main menu buttons
+            for v in (
+                self.btn_bookmarks,
+                self.btn_add_bookmark,
+                self.btn_hotkeys,
+                self.btn_js,
+                self.btn_nuke,
+                self.btn_mini_ai,
+                self.btn_about,
+            ):
+                try:
+                    v.setHidden_(True)
+                except Exception as e:
+                    print("[MiniAI] Hide button:", e)
+
+            # Hide other menu pages
+            try:
+                if getattr(self, "bookmark_view", None):
+                    self.bookmark_view.setHidden_(True)
+            except Exception as e:
+                print("[MiniAI] Hide bookmarks:", e)
+
+            # Show MiniAI page
+            self.mini_ai_view.setHidden_(False)
+
+            # Refresh statistics
+            try:
+                self._reloadMiniAIView()
+            except Exception as e:
+                print("[MiniAI] Reload failed:", e)
+
+            # Force redraw
+            self.menu_panel.setNeedsDisplay_(True)
+            self.menu_panel.displayIfNeeded()
+
+        except Exception as e:
+            print("[showMiniAI_]", e)
+        
+    # ==========================================================
+    # Refresh MiniAI Summary
+    # ==========================================================
+
+    def _reloadMiniAIView(self):
+
+        if not getattr(self, "mini_ai", None):
+            return
+
+        try:
+            stats = self.mini_ai.get_statistics()
+
+            # -----------------------------
+            # Status
+            # -----------------------------
+            risk = str(stats.get("overall_risk", "low")).lower()
+
+            status_icon = {
+                "low": "🟢",
+                "medium": "🟡",
+                "high": "🔴",
+            }.get(risk, "🟢")
+
+            self.lbl_ai_status.setStringValue_(f"{status_icon} Protected")
+            self.lbl_ai_risk.setStringValue_(risk.title())
+
+            # -----------------------------
+            # Network
+            # -----------------------------
+            network = stats.get("network", {})
+
+            self.lbl_ai_requests.setStringValue_(
+                str(network.get("total_requests", 0))
+            )
+
+            # -----------------------------
+            # Threats
+            # -----------------------------
+            threats = stats.get("threats", {})
+
+            self.lbl_ai_trackers.setStringValue_(
+                str(threats.get("trackers", 0))
+            )
+
+            self.lbl_ai_fp.setStringValue_(
+                str(threats.get("fingerprinting", 0))
+            )
+
+            self.lbl_ai_intrusions.setStringValue_(
+                str(threats.get("intrusions", 0))
+            )
+
+            self.lbl_ai_http.setStringValue_(
+                str(threats.get("http_blocks", 0))
+            )
+
+            # -----------------------------
+            # PQ
+            # -----------------------------
+            pq = stats.get("pq", {})
+
+            self.lbl_ai_pq.setStringValue_(
+                pq.get("risk_level", "Low").title()
+            )
+
+            # -----------------------------
+            # Lockdown
+            # -----------------------------
+            lockdown = stats.get("lockdown", {})
+
+            self.lbl_ai_lockdown.setStringValue_(
+                "ON" if lockdown.get("active", False) else "OFF"
+            )
+
+        except Exception as e:
+            print("[MiniAI Summary]", e)
+            
     def update_security_indicator(self, trusted):
         try:
             cell = self.addr.cell()
@@ -5222,51 +6812,6 @@ class Browser(NSObject):
             self.close_threat_report_tab()
         except Exception as e:
             print("[Browser] Close report error:", e)
-
-    def close_threat_report_tab(self):
-
-        idx = -1
-
-        for i, tab in enumerate(self.tabs):
-            if getattr(tab, "url", None) == "darkelf://report":
-                idx = i
-                break
-
-        if idx < 0:
-            return
-
-        try:
-            report_view = self.tabs[idx].view
-
-            if report_view and report_view.superview():
-                report_view.removeFromSuperview()
-
-        except Exception as e:
-            log(2, e)
-
-        del self.tabs[idx]
-
-        if not self.tabs:
-            self._add_tab(home=True)
-            return
-
-        if self.active >= len(self.tabs):
-            self.active = len(self.tabs) - 1
-
-        wk = self.tabs[self.active].view
-
-        try:
-            if wk.superview():
-                wk.removeFromSuperview()
-
-            self._mount_webview(wk)
-
-        except Exception as e:
-            print("[Browser] restore webview error:", e)
-
-        self._bring_tabbar_to_front()
-        self._update_tab_buttons()
-        self._sync_addr()
 
     def controlTextDidBeginEditing_(self, notification):
         try:
@@ -5929,11 +7474,24 @@ class Browser(NSObject):
 
         self.btn_hotkeys = make_icon_btn(
             "keyboard",
-            "Darkelf Command Center"
+            "Keyboard Shortcuts"
+        )
+        
+        self.btn_bookmark = make_icon_btn(
+            "bookmark",
+            "Bookmarks"
+        )
+        
+        self.btn_menu = make_icon_btn(
+            "line.3.horizontal",
+            "Menu"
         )
 
+        self.btn_menu.setTarget_(self)
+        self.btn_menu.setAction_("toggleMenu:")
+        
         self.btn_hotkeys.setTarget_(self)
-        self.btn_hotkeys.setAction_("openDarkelfCommandCenter:")
+        self.btn_hotkeys.setAction_("showKeyboardShortcuts:")
         
         self.btn_js = make_icon_btn(
             "bolt.fill" if self.js_enabled else "bolt.slash.fill",
@@ -5953,10 +7511,12 @@ class Browser(NSObject):
         )
 
         for b, sel in [
-            (self.btn_hotkeys, "openDarkelfCommandCenter:"),
+            (self.btn_hotkeys, "showKeyboardShortcuts:"),
             (self.btn_js, "actToggleJS:"),
             (self.btn_nuke, "actNuke:"),
-            (self.btn_mini_ai, "openThreatReport:"),
+            (self.btn_mini_ai, "showMiniAI:"),
+            (self.btn_bookmark, "toggleBookmarkToolbar:"),   # NEW
+            (self.btn_menu, "toggleMenu:"),
         ]:
             b.setTarget_(self)
             b.setAction_(sel)
@@ -5996,9 +7556,17 @@ class Browser(NSObject):
         # --------------------------------------------------
         x = pad
 
-        for b in (self.btn_back, self.btn_fwd, self.btn_reload):
-            b.setFrame_(NSMakeRect(x, btn_y, btn, btn))
-            x += btn + 6
+        # Back
+        self.btn_back.setFrame_(NSMakeRect(x, btn_y + 1, btn, btn))
+        x += btn + 6
+
+        # Forward
+        self.btn_fwd.setFrame_(NSMakeRect(x, btn_y + 1, btn, btn))
+        x += btn + 6
+
+        # Reload
+        self.btn_reload.setFrame_(NSMakeRect(x, btn_y, btn, btn))
+        x += btn + 6
 
         left_end = x + 2
 
@@ -6006,14 +7574,16 @@ class Browser(NSObject):
         # Right buttons
         # --------------------------------------------------
         right_buttons = (
-            self.btn_hotkeys,
-            self.btn_js,
-            self.btn_nuke,
-            self.btn_mini_ai,
+            self.btn_bookmark,
+            self.btn_menu,
         )
 
+        # --------------------------------------------------
+        # Right-side controls
+        # --------------------------------------------------
+
         right_gap = 14.0
-        urlbar_gap = 18.0
+        right_margin = 120.0      # ← Increase this to shorten the URL bar
 
         right_cluster_width = (
             len(right_buttons) * btn
@@ -6029,14 +7599,19 @@ class Browser(NSObject):
             x_cursor += btn + right_gap
 
         # --------------------------------------------------
-        # URL bar
+        # URL Bar (centered)
         # --------------------------------------------------
-        url_x = left_end
-        url_w = max(200, right_x - urlbar_gap - url_x)
 
-        self.urlbar.setFrame_(
-            NSMakeRect(url_x, url_y, url_w, url_h)
-        )
+        available_left = left_end
+        available_right = right_x - 20
+
+        available_width = available_right - available_left
+
+        url_w = min(900, available_width)      # Try 850–950
+
+        url_x = available_left + (available_width - url_w) / 2
+
+        self.addr.setFrame_(NSMakeRect(url_x, btn_y, url_w, btn))
 
     # Make sure your existing onResize_ calls _layout() AND _layout_toolbar()
     def onResize_(self, note):
@@ -6056,7 +7631,6 @@ class Browser(NSObject):
 
             # keep toolbar on top
             if getattr(self, "toolbar_container", None):
-                # Only remove if it's attached elsewhere
                 if (
                     self.toolbar_container.superview() is not None
                     and self.toolbar_container.superview() != cv
@@ -6065,7 +7639,7 @@ class Browser(NSObject):
                         self.toolbar_container.removeFromSuperview()
                     except Exception as e:
                         log(2, e)
-                # Only add if not already attached to contentView
+
                 if self.toolbar_container.superview() != cv:
                     cv.addSubview_(self.toolbar_container)
 
@@ -6079,9 +7653,12 @@ class Browser(NSObject):
                         self.tabbar.removeFromSuperview()
                     except Exception as e:
                         log(2, e)
+
                 if self.tabbar.superview() != cv:
                     cv.addSubview_(self.tabbar)
+
                 self.tabbar.displayIfNeeded()
+
         except Exception as e:
             log(2, e)
 
@@ -6644,7 +8221,11 @@ class Browser(NSObject):
             )
 
         cv.addSubview_(wk)
-
+        
+        if getattr(self, "menu_panel", None):
+            self.menu_panel.removeFromSuperview()
+            cv.addSubview_(self.menu_panel)
+            
         # FIXED BACKGROUND HANDLING
         try:
             wk.setOpaque_(True)
@@ -7231,12 +8812,6 @@ class Browser(NSObject):
             tab = self.tabs[self.active]
             wk = tab.view
 
-            # 🔥 SPECIAL CASE: Threat Report (fix white screen)
-            if tab.url == "darkelf://report":
-                html = self._build_threat_report_html()
-                wk.loadHTMLString_baseURL_(html, None)
-                return
-
             # Existing logic preserved
             u = wk.URL()
             cur = str(u.absoluteString()) if u is not None else (tab.url or "")
@@ -7503,15 +9078,6 @@ class Browser(NSObject):
                     except Exception as e:
                         print("[Fullscreen Error]", e)
 
-                    return None
-
-                # ----------------------------------
-                # ⇧⌘L THREAT
-                # ----------------------------------
-                if ch == "l" and shift:
-
-
-                    self.openThreatReport_(None)
                     return None
 
                 # ----------------------------------
@@ -7836,794 +9402,6 @@ class Browser(NSObject):
             10,   # keyDown
             handler
         )
-        
-    def openDarkelfCommandCenter_(self, sender):
-
-        try:
-
-            print("[Darkelf] Opening Command Center")
-
-            # ------------------------------------------------
-            # HOTKEY DATA
-            # ------------------------------------------------
-
-            hotkeys = [
-                ("⌘T", "New Tab"),
-                ("⌘W", "Close Tab"),
-                ("⌘R", "Reload"),
-                ("⌘L", "Address Bar"),
-                ("⌘F", "Find In Page"),
-                ("ESC", "Close Find Bar"),
-                ("⌃⌘F", "Fullscreen"),
-                ("⇧⌘L", "Threat Console"),
-                ("⇧⌘/", "Hotkey Help"),
-                ("⌘←", "Back"),
-                ("⌘→", "Forward"),
-                ("⌘+", "Zoom In"),
-                ("⌘-", "Zoom Out"),
-                ("⇧⌘X", "Exit"),
-            ]
-
-            rows = ""
-
-            for key, desc in hotkeys:
-
-                rows += f"""
-                <div class="hotkey-row">
-                    <div class="key">{key}</div>
-                    <div class="desc">{desc}</div>
-                </div>
-                """
-
-            # ------------------------------------------------
-            # HTML
-            # ------------------------------------------------
-
-            html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <meta charset="utf-8">
-            
-            <style>
-
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }}
-
-            body {{
-
-                background:
-                    radial-gradient(circle at top,
-                    #102018 0%,
-                    #050607 40%,
-                    #010101 100%);
-
-                color: white;
-
-                font-family:
-                    -apple-system,
-                    BlinkMacSystemFont,
-                    sans-serif;
-
-                overflow-x: hidden;
-
-                padding: 40px;
-            }}
-
-            body::before {{
-
-                content: "";
-
-                position: fixed;
-
-                inset: 0;
-
-                background-image:
-                    linear-gradient(rgba(0,255,120,0.04) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(0,255,120,0.04) 1px, transparent 1px);
-
-                background-size: 40px 40px;
-
-                pointer-events: none;
-            }}
-
-            .hero {{
-
-                margin-bottom: 35px;
-            }}
-
-            .title {{
-
-                font-size: 72px;
-                font-weight: 900;
-
-                letter-spacing: 8px;
-
-                color: #00ff88;
-
-                text-shadow:
-                    0 0 10px rgba(0,255,120,0.7),
-                    0 0 35px rgba(0,255,120,0.45),
-                    0 0 90px rgba(0,255,120,0.2);
-
-                margin-bottom: 12px;
-            }}
-
-            .subtitle {{
-
-                color: #7d8b84;
-
-                font-size: 14px;
-
-                letter-spacing: 4px;
-
-                text-transform: uppercase;
-            }}
-
-            .layout {{
-
-                display: grid;
-
-                grid-template-columns: 1.3fr 1fr;
-
-                gap: 30px;
-            }}
-
-            .panel {{
-
-                position: relative;
-
-                background:
-                    linear-gradient(
-                        180deg,
-                        rgba(14,18,20,0.96),
-                        rgba(6,8,9,0.96)
-                    );
-
-                border-radius: 24px;
-
-                padding: 30px;
-
-                border:
-                    1px solid rgba(0,255,120,0.18);
-
-                box-shadow:
-                    0 0 40px rgba(0,255,120,0.08),
-                    inset 0 0 25px rgba(0,255,120,0.03);
-
-                overflow: hidden;
-            }}
-
-            .panel::before {{
-
-                content: "";
-
-                position: absolute;
-
-                top: 0;
-                left: 0;
-                right: 0;
-
-                height: 2px;
-
-                background:
-                    linear-gradient(
-                        90deg,
-                        transparent,
-                        #00ff88,
-                        transparent
-                    );
-            }}
-
-            .section-title {{
-
-                color: #00ff88;
-
-                font-size: 22px;
-
-                margin-bottom: 24px;
-
-                font-weight: 800;
-
-                letter-spacing: 2px;
-            }}
-
-            .hotkey-row {{
-
-                display: flex;
-
-                align-items: center;
-
-                margin-bottom: 14px;
-
-                padding: 16px;
-
-                border-radius: 16px;
-
-                background:
-                    rgba(255,255,255,0.03);
-
-                border:
-                    1px solid rgba(255,255,255,0.04);
-
-                transition: all 0.2s ease;
-            }}
-
-            .hotkey-row:hover {{
-
-                transform:
-                    translateX(6px)
-                    scale(1.01);
-
-                background:
-                    rgba(0,255,120,0.08);
-
-                border:
-                    1px solid rgba(0,255,120,0.25);
-
-                box-shadow:
-                    0 0 18px rgba(0,255,120,0.15);
-            }}
-
-            .key {{
-
-                width: 120px;
-
-                text-align: center;
-
-                padding: 10px;
-
-                border-radius: 12px;
-
-                font-family: Menlo, monospace;
-
-                color: #00ff88;
-
-                border:
-                    1px solid rgba(0,255,120,0.35);
-
-                background:
-                    rgba(0,255,120,0.08);
-
-                font-weight: bold;
-
-                box-shadow:
-                    inset 0 0 12px rgba(0,255,120,0.08);
-            }}
-
-            .desc {{
-
-                margin-left: 18px;
-
-                color: #dbe4de;
-
-                font-size: 15px;
-            }}
-
-            .about {{
-
-                line-height: 1.9;
-
-                color: #c7d0ca;
-
-                font-size: 15px;
-            }}
-
-            .about strong {{
-
-                color: #00ff88;
-            }}
-
-            .highlight-grid {{
-
-                display: grid;
-
-                grid-template-columns: 1fr 1fr;
-
-                gap: 16px;
-
-                margin-top: 26px;
-            }}
-
-            .highlight {{
-
-                padding: 18px;
-
-                border-radius: 16px;
-
-                background:
-                    rgba(255,255,255,0.03);
-
-                border:
-                    1px solid rgba(0,255,120,0.08);
-
-                transition: 0.2s;
-            }}
-
-            .highlight:hover {{
-
-                background:
-                    rgba(0,255,120,0.08);
-
-                transform: translateY(-3px);
-            }}
-
-            .highlight-title {{
-
-                color: #00ff88;
-
-                font-size: 13px;
-
-                letter-spacing: 1px;
-
-                margin-bottom: 10px;
-
-                font-weight: 700;
-            }}
-
-            .highlight-text {{
-
-                color: #d6dfd9;
-
-                font-size: 14px;
-
-                line-height: 1.5;
-            }}
-            
-            .dashboard {{
-
-                margin-top: 30px;
-
-                display: flex;
-
-                flex-direction: column;
-
-                gap: 18px;
-            }}
-
-            .dash-card {{
-
-                background:
-                    rgba(255,255,255,0.03);
-
-                border:
-                    1px solid rgba(0,255,120,0.10);
-
-                border-radius: 18px;
-
-                padding: 20px;
-
-                box-shadow:
-                    inset 0 0 18px rgba(0,255,120,0.03);
-            }}
-
-            .dash-title {{
-
-                color: #00ff88;
-
-                font-size: 14px;
-
-                letter-spacing: 2px;
-
-                margin-bottom: 16px;
-
-                font-weight: 800;
-            }}
-
-            .status-grid {{
-
-                display: flex;
-
-                flex-wrap: wrap;
-
-                gap: 10px;
-            }}
-
-            .status-pill {{
-
-                padding: 10px 14px;
-
-                border-radius: 999px;
-
-                background:
-                    rgba(0,255,120,0.08);
-
-                border:
-                    1px solid rgba(0,255,120,0.18);
-
-                color: #00ff88;
-
-                font-size: 12px;
-
-                font-weight: 700;
-
-                letter-spacing: 1px;
-            }}
-
-            .status-pill.warning {{
-
-                color: #ffcc66;
-
-                border:
-                    1px solid rgba(255,200,80,0.25);
-
-                background:
-                    rgba(255,200,80,0.08);
-            }}
-
-            .feature {{
-
-                color: #d9e2dc;
-
-                padding: 8px 0;
-
-                border-bottom:
-                    1px solid rgba(255,255,255,0.04);
-            }}
-
-            .terminal {{
-
-                background:
-                    linear-gradient(
-                        180deg,
-                        rgba(0,0,0,0.55),
-                        rgba(0,0,0,0.82)
-                    );
-            }}
-
-            .terminal-line {{
-
-                font-family: Menlo, monospace;
-
-                color: #7d8b84;
-
-                margin-bottom: 10px;
-
-                font-size: 13px;
-            }}
-
-            .terminal-line.green {{
-
-                color: #00ff88;
-
-                text-shadow:
-                    0 0 8px rgba(0,255,120,0.4);
-            }}
-            
-            .statusbar {{
-
-                margin-top: 28px;
-
-                display: flex;
-
-                gap: 18px;
-
-                flex-wrap: wrap;
-            }}
-
-            .status {{
-
-                padding: 10px 16px;
-
-                border-radius: 999px;
-
-                background:
-                    rgba(0,255,120,0.08);
-
-                border:
-                    1px solid rgba(0,255,120,0.18);
-
-                color: #00ff88;
-
-                font-size: 12px;
-
-                letter-spacing: 1px;
-
-                font-weight: 700;
-            }}
-
-            .footer {{
-
-                margin-top: 30px;
-
-                color: #5f6963;
-
-                font-size: 12px;
-
-                letter-spacing: 2px;
-            }}
-
-            </style>
-            </head>
-
-            <body>
-
-                <div class="hero">
-
-                    <div class="title">
-                        DARKELF
-                    </div>
-
-                    <div class="subtitle">
-                        CYBER TACTICAL COMMAND CENTER
-                    </div>
-
-                </div>
-
-                <div class="layout">
-
-                    <div class="panel">
-
-                        <div class="section-title">
-                            HOTKEY MATRIX
-                        </div>
-
-                        {rows}
-
-                    </div>
-
-                    <div class="panel">
-
-                        <div class="section-title">
-                            ABOUT DARKELF
-                        </div>
-
-                        <div class="about">
-
-                            <strong>Darkelf</strong> is a next-generation
-                            tactical AI browser engineered for privacy,
-                            immersive cyber navigation, and high-speed workflows.
-
-                            <br><br>
-
-                            Built with a futuristic hacker-inspired interface,
-                            Darkelf combines ephemeral browsing, stealth-focused
-                            WebKit isolation, AI threat monitoring,
-                            and command-center aesthetics into one environment.
-
-                            <br><br>
-
-                            Designed for researchers, operators, engineers,
-                            investigators, cybersecurity professionals,
-                            and advanced users who demand full tactical control.
-
-                        </div>
-
-                        <div class="highlight-grid">
-
-                            <div class="highlight">
-
-                                <div class="highlight-title">
-                                    EPHEMERAL MEMORY
-                                </div>
-
-                                <div class="highlight-text">
-                                    Zero-persistence browsing with isolated
-                                    memory-only sessions.
-                                </div>
-
-                            </div>
-
-                            <div class="highlight">
-
-                                <div class="highlight-title">
-                                    DARKELF MINI AI
-                                </div>
-
-                                <div class="highlight-text">
-                                    Real-time threat analysis and anomaly detection
-                                    engine integrated directly into the browser.
-                                </div>
-
-                            </div>
-
-                            <div class="highlight">
-
-                                <div class="highlight-title">
-                                    CYBERPUNK UI
-                                </div>
-
-                                <div class="highlight-text">
-                                    Tactical neon-green interface designed
-                                    for immersive hacker workflows.
-                                </div>
-
-                            </div>
-
-                            <div class="highlight">
-
-                                <div class="highlight-title">
-                                    FIRST PARTY ISOLATION
-                                </div>
-
-                                <div class="highlight-text">
-                                    Advanced tab and domain isolation
-                                    architecture for maximum privacy.
-                                </div>
-
-                            </div>
-
-                        </div>
-                        
-                        <div class="dashboard">
-
-                <div class="dash-card">
-
-                    <div class="dash-title">
-                        SYSTEM STATUS
-                    </div>
-
-                    <div class="status-grid">
-
-                        <div class="status-pill">
-                            AI CORE ONLINE
-                        </div>
-
-                        <div class="status-pill">
-                            PQ ACTIVE
-                        </div>
-
-                        <div class="status-pill">
-                            MEMORY EPHEMERAL
-                        </div>
-
-                        <div class="status-pill">
-                            TRACKERS BLOCKED
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <div class="dash-card">
-
-                    <div class="dash-title">
-                        DARKELF HIGHLIGHTS
-                    </div>
-
-                    <div class="feature">
-                        ▸ Real-time Threat Analysis
-                    </div>
-
-                    <div class="feature">
-                        ▸ WebKit Process Isolation
-                    </div>
-
-                    <div class="feature">
-                        ▸ Fingerprint Spoofing Defense
-                    </div>
-
-                    <div class="feature">
-                        ▸ AI-Based Tracker Detection
-                    </div>
-
-                    <div class="feature">
-                        ▸ Ephemeral Memory Sessions
-                    </div>
-
-                </div>
-
-                <div class="dash-card terminal">
-
-                    <div class="dash-title">
-                        LIVE TERMINAL
-                    </div>
-
-                    <div class="terminal-line">
-                        [ OK ] AI Sentinel initialized
-                    </div>
-
-                    <div class="terminal-line">
-                        [ OK ] PQ Integrity active
-                    </div>
-
-                    <div class="terminal-line">
-                        [ OK ] WebKit sandbox isolated
-                    </div>
-
-                    <div class="terminal-line green">
-                        [ LIVE ] Threat monitor operational
-                    </div>
-
-                </div>
-
-            </div>
-                        <div class="statusbar">
-
-                            <div class="status">
-                                SYSTEM ONLINE
-                            </div>
-
-                            <div class="status">
-                                AI ACTIVE
-                            </div>
-
-                            <div class="status">
-                                PQ ENABLED
-                            </div>
-
-                        </div>
-
-                        <div class="footer">
-                            DARKELF • SECURE EPHEMERAL BROWSING PLATFORM
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </body>
-            </html>
-            """
-
-            # ----------------------------------------
-            # CREATE REAL INTERNAL TAB
-            # ----------------------------------------
-
-            container_nonce = secrets.token_hex(4)
-
-            pq_seed = hashlib.sha256(os.urandom(32)).digest()
-
-            tab = Tab(
-                view=None,
-                data_store=None,
-                url="darkelf://command",
-                host="Darkelf Command Center",
-                canvas_seed=None,
-                container_nonce=container_nonce,
-                tab_uid=self._tab_uid_counter + 1,
-            )
-
-            tab._pq_seed = pq_seed
-            tab._pq_counter = 0
-            tab._nonce = secrets.token_hex(8)
-
-            self._tab_uid_counter += 1
-
-            # ----------------------------------------
-            # CREATE WEBVIEW
-            # ----------------------------------------
-
-            wk, store = self._new_wk(container_nonce, pq_seed, tab)
-
-            tab.view = wk
-            tab.data_store = store
-
-            wk.setNavigationDelegate_(self._nav_delegate)
-
-            # ----------------------------------------
-            # MOUNT TAB
-            # ----------------------------------------
-
-            self._mount_webview(wk)
-
-            self.tabs.append(tab)
-
-            self.active = len(self.tabs) - 1
-
-            # ----------------------------------------
-            # LOAD HTML
-            # ----------------------------------------
-
-            wk.loadHTMLString_baseURL_(
-                html,
-                NSURL.URLWithString_("darkelf://command")
-            )
-
-            # ----------------------------------------
-            # UI UPDATE
-            # ----------------------------------------
-
-            self._update_tab_buttons()
-
-            self._sync_addr()
-
-        except Exception as e:
-
-            print("[Darkelf Command Center Error]", e)
             
     def safe_shutdown(self):
 
