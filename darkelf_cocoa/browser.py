@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v7.0.4 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v7.0.5 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -2063,7 +2063,7 @@ class ContentRuleManager:
     # --------------------------------------------------
     # Versioning
     # --------------------------------------------------
-    VERSION = "15.02"
+    VERSION = "15.06"
     IDENTIFIER = f"darkelf_rules_v{VERSION}"
     
     # Refresh filter subscriptions once per week.
@@ -2678,9 +2678,10 @@ class ContentRuleManager:
         # --------------------------------------------------
         # Safe Sites
         # --------------------------------------------------
-
         SAFE_SITES = sorted(set([
             "accounts\\.google\\.com",
+            "amiunique\\.org",
+            "coveryourtracks\\.eff\\.org",
             "github\\.com",
             "mail\\.google\\.com",
             "office\\.com",
@@ -2715,9 +2716,9 @@ class ContentRuleManager:
             ".*beacon.*",
             ".*tracker.*",
             ".*tracking.*",
-            ".*fingerprint.*",
-            ".*fingerprintjs.*",
-            ".*fpjs.*",
+            #".*fingerprint.*",
+            #".*fingerprintjs.*",
+            #".*fpjs.*",
             ".*pixel.*",
             ".*adsystem.*",
             ".*advertising.*",
@@ -2801,7 +2802,19 @@ class ContentRuleManager:
             "teads.tv",
             "revcontent.com",
             "contentabc.com",
-
+            
+            # FingerprintJS infrastructure
+            ".*fpjscdn\\.net.*",
+            ".*openfpcdn\\.io.*",
+            ".*fingerprintjs\\.com.*",
+            ".*metrics\\.wp\\.com.*",         # WordPress.com metrics
+            ".*cdn\\.segment\\.com.*",        # Segment
+            ".*api\\.segment\\.io.*",         # Segment API
+            ".*fullstory\\.com.*",            # FullStory
+            ".*fullstory\\.io.*",             # FullStory CDN
+            ".*mouseflow\\.com.*",            # Mouseflow
+            ".*hotjar\\.com.*",               # Hotjar
+            ".*clarity\\.ms.*",               # Microsoft Clarity
             # ---------------- Google ----------------
             "doubleclick\\.net",
             "googlesyndication\\.com",
@@ -5011,7 +5024,7 @@ class SearchHandler(NSObject):
             if not q or len(q.strip()) < 2:
                 return  # Ignore short/no input
 
-            url = "https://lite.duckduckgo.com/lite/?q=" + re.sub(r"\s+", "+", q)
+            url = "https://www.mojeek.com/search?q=" + re.sub(r"\s+", "+", q)
             owner._add_tab(url)
 
         except Exception as e:
@@ -7215,7 +7228,7 @@ class Browser(NSObject):
             if "://" not in text and "." in text:
                 text = "https://" + text
             elif "://" not in text:
-                text = "https://lite.duckduckgo.com/lite/?q=" + quote_plus(text)
+                text = "https://www.mojeek.com/search?q=" + quote_plus(text)
 
             self._add_tab(home=False)
 
@@ -8896,7 +8909,7 @@ class Browser(NSObject):
             # Build URL
             if "://" not in text and "." not in text:
                 q = quote_plus(text)
-                url = "https://lite.duckduckgo.com/lite/?q=" + q
+                url = "https://www.mojeek.com/search?q=" + q
             elif "://" not in text:
                 url = "https://" + text
             else:
