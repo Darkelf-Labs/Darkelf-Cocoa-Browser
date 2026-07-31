@@ -20,21 +20,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      # Temporary debug step
-      - name: Show repository contents
+      - name: Install Darkelf SecureAudit
         run: |
-          pwd
-          ls -la
-          find . -name "*.py"
+          python -m pip install --upgrade pip
+          python -m pip install darkelf-secureaudit
 
-      - name: Run Darkelf WebKit Security Audit
+      - name: Run Darkelf SecureAudit
         run: |
-          python darkelf_cocoa/darkelf_webkit_security_audit_v8_4.py darkelf_cocoa --sarif results.sarif
+          darkelf-secureaudit darkelf_cocoa --sarif results.sarif
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
