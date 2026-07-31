@@ -1,4 +1,4 @@
 # Darkelf Cocoa Browser
 # Package initializer
 
-__version__ = "4.4.2"
+__version__ = "7.0.6"
