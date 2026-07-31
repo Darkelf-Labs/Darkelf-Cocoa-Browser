@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v7.0.5 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v7.0.6 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -2063,7 +2063,7 @@ class ContentRuleManager:
     # --------------------------------------------------
     # Versioning
     # --------------------------------------------------
-    VERSION = "15.06"
+    VERSION = "15.10"
     IDENTIFIER = f"darkelf_rules_v{VERSION}"
     
     # Refresh filter subscriptions once per week.
@@ -2086,7 +2086,7 @@ class ContentRuleManager:
     _tracker_count = 0
     
     RULE_BUDGET = {
-        "easylist": 55000,
+        "easylist": 55000,        # Leave headroom under 60k
         "antiadblock": 5000,
     }
     
@@ -2106,7 +2106,7 @@ class ContentRuleManager:
             "url": "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt",
         },
     }
-    
+        
     @classmethod
     def _ensure_cache(cls):
         os.makedirs(cls.CACHE_DIR, exist_ok=True)
@@ -2763,11 +2763,6 @@ class ContentRuleManager:
         # --------------------------------------------------
         # Built-in Tracker Domains
         # --------------------------------------------------
-
-        BLOCK_DOMAINS = [
-            # <-- paste your existing list here -->
-        ]
-        
         BLOCK_DOMAINS = sorted({
         
             #----------------Ads----------------------
@@ -2815,6 +2810,58 @@ class ContentRuleManager:
             ".*mouseflow\\.com.*",            # Mouseflow
             ".*hotjar\\.com.*",               # Hotjar
             ".*clarity\\.ms.*",               # Microsoft Clarity
+            
+            # ---------------- Spotify Ads ----------------
+            "ads\\.spotify\\.com",
+            "audio-fa\\.spotify\\.com",
+
+            # ---------------- Triton Digital ----------------
+            "tritondigital\\.com",
+            "deliveryengine\\.tritondigital\\.com",
+            "adswizz\\.com",
+
+            # ---------------- AdMob ----------------
+            "admob\\.com",
+            "googleads\\.g\\.doubleclick\\.net",
+
+            # ---------------- Chartboost ----------------
+            "chartboost\\.com",
+            "api\\.chartboost\\.com",
+
+            # ---------------- InMobi ----------------
+            "inmobi\\.com",
+            "ads\\.inmobi\\.com",
+            "sdk\\.inmobi\\.com",
+
+            # ---------------- Mintegral ----------------
+            "mintegral\\.com",
+            "ads\\.mintegral\\.com",
+
+            # ---------------- Crazy Egg ----------------
+            "crazyegg\\.com",
+            "script\\.crazyegg\\.com",
+
+            # ---------------- Neustar ----------------
+            "neustar\\.biz",
+            "neustar\\.com",
+
+            # ---------------- Quora Pixel ----------------
+            "px\\.quora\\.com",
+            "q\\.quora\\.com",
+
+            # ---------------- Singular ----------------
+            "singular\\.net",
+
+            # ---------------- Airship ----------------
+            "urbanairship\\.com",
+
+            # ---------------- Tealium ----------------
+            "tealiumiq\\.com",
+            "tags\\.tiqcdn\\.com",
+
+            # ---------------- FullStory CDN ----------------
+            "edge\\.fullstory\\.com",
+            
             # ---------------- Google ----------------
             "doubleclick\\.net",
             "googlesyndication\\.com",
@@ -6523,7 +6570,7 @@ class Browser(NSObject):
         version.setAlignment_(1)
         version.setFont_(NSFont.systemFontOfSize_(12))
         version.setTextColor_(NSColor.whiteColor())
-        version.setStringValue_("Version 7.0.4")
+        version.setStringValue_("Version 7.0.6")
 
         panel.addSubview_(version)
 
