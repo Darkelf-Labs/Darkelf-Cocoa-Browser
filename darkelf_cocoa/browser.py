@@ -1,4 +1,4 @@
-# Darkelf Cocoa Browser v7.0.6 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
+# Darkelf Cocoa Browser v7.0.7 — Ephemeral, Privacy-Focused Web Browser (macOS / Cocoa Build)
 # Copyright (C) 2025 Dr. Kevin Moore
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
@@ -273,61 +273,96 @@ def log(level, *msg):
 def inject_screen_spoof(ucc):
     js = r"""
     (() => {
-        const width = 1920;
-        const height = 1080;
-        const dpr = 2;
+
+        const WIDTH = 1920;
+        const HEIGHT = 1080;
+        const MENU = 38;
+
+        const log = (...a) => console.log("[Darkelf Screen]", ...a);
 
         const define = (obj, prop, value) => {
+
             try {
+
                 Object.defineProperty(obj, prop, {
                     get: () => value,
+                    enumerable: true,
                     configurable: true
                 });
-            } catch (e) {}
-        };
 
-        const patch = () => {
-            define(Screen.prototype, "width", width);
-            define(Screen.prototype, "height", height);
-            define(Screen.prototype, "availWidth", width);
-            define(Screen.prototype, "availHeight", height - 37);
+                log("PATCHED", prop, value);
 
-            define(Window.prototype, "innerWidth", width);
-            define(Window.prototype, "innerHeight", height);
-            define(Window.prototype, "outerWidth", width);
-            define(Window.prototype, "outerHeight", height);
-            define(Window.prototype, "devicePixelRatio", dpr);
+            } catch (e) {
 
-            define(window.screen, "width", width);
-            define(window.screen, "height", height);
-            define(window.screen, "availWidth", width);
-            define(window.screen, "availHeight", height - 37);
+                log("FAILED", prop, e);
 
-            define(window, "innerWidth", width);
-            define(window, "innerHeight", height);
-            define(window, "outerWidth", width);
-            define(window, "outerHeight", height);
-            define(window, "devicePixelRatio", dpr);
-
-            if (window.visualViewport) {
-                define(window.visualViewport, "width", width);
-                define(window.visualViewport, "height", height);
-                define(window.visualViewport, "scale", 1);
             }
         };
 
+        const dump = () => {
+
+            try {
+
+                log("window.screen =", window.screen);
+
+                log("width =", window.screen.width);
+                log("height =", window.screen.height);
+                log("availWidth =", window.screen.availWidth);
+                log("availHeight =", window.screen.availHeight);
+
+                log(
+                    "Screen.prototype.width descriptor",
+                    Object.getOwnPropertyDescriptor(
+                        Screen.prototype,
+                        "width"
+                    )
+                );
+
+                log(
+                    "window.screen.width descriptor",
+                    Object.getOwnPropertyDescriptor(
+                        window.screen,
+                        "width"
+                    )
+                );
+
+            } catch(e) {
+
+                log("dump failed", e);
+
+            }
+
+        };
+
+        const patch = () => {
+
+            define(window.screen, "width", WIDTH);
+            define(window.screen, "height", HEIGHT);
+            define(window.screen, "availWidth", WIDTH);
+            define(window.screen, "availHeight", HEIGHT - MENU);
+
+            dump();
+
+        };
+
         patch();
-        document.addEventListener("DOMContentLoaded", patch, { once: true });
-        window.addEventListener("load", patch, { once: true });
+
+        document.addEventListener("DOMContentLoaded", patch);
+
+        window.addEventListener("pageshow", patch);
+
+        window.addEventListener("load", patch);
+
     })();
     """
 
     script = WKUserScript.alloc().initWithSource_injectionTime_forMainFrameOnly_(
-        js, WKUserScriptInjectionTimeAtDocumentStart, False
+        js,
+        WKUserScriptInjectionTimeAtDocumentStart,
+        False
     )
+
     ucc.addUserScript_(script)
-
-
 def darkelf_destroy_tab(tab):
     try:
         view = getattr(tab, "view", None)
@@ -2063,7 +2098,7 @@ class ContentRuleManager:
     # --------------------------------------------------
     # Versioning
     # --------------------------------------------------
-    VERSION = "15.10"
+    VERSION = "20.30"
     IDENTIFIER = f"darkelf_rules_v{VERSION}"
     
     # Refresh filter subscriptions once per week.
@@ -2717,7 +2752,7 @@ class ContentRuleManager:
             ".*tracker.*",
             ".*tracking.*",
             #".*fingerprint.*",
-            #".*fingerprintjs.*",
+            #.*fingerprintjs.*",
             #".*fpjs.*",
             ".*pixel.*",
             ".*adsystem.*",
@@ -2765,6 +2800,90 @@ class ContentRuleManager:
         # --------------------------------------------------
         BLOCK_DOMAINS = sorted({
         
+            # ==========================================================
+            # Spotify Ads
+            # ==========================================================
+            "spclient.wg.spotify.com",
+
+            # ==========================================================
+            # Criteo
+            # ==========================================================
+            "criteo.com",
+            "criteo.net",
+            "bid.criteo.com",
+            "cas.criteo.com",
+            "gum.criteo.com",
+            "static.criteo.net",
+            "dis.criteo.com",
+
+            # ==========================================================
+            # Google AdMob
+            # ==========================================================
+            "googleads.g.doubleclick.net",
+            "googleadservices.com",
+            "pagead2.googlesyndication.com",
+            "securepubads.g.doubleclick.net",
+            "adservice.google.com",
+            "partner.googleadservices.com",
+
+            # ==========================================================
+            # Mintegral
+            # ==========================================================
+            "mintegral.com",
+            "mintegral.net",
+            "mtgglobals.com",
+            "ads.mintegral.com",
+
+            # ==========================================================
+            # Pinterest Tag
+            # ==========================================================
+            "ct.pinterest.com",
+            "log.pinterest.com",
+            "trk.pinterest.com",
+            "analytics.pinterest.com",
+
+            # ==========================================================
+            # Snapchat Pixel
+            # ==========================================================
+            "tr.snapchat.com",
+            "snapads.com",
+
+            # ==========================================================
+            # Reddit Pixel
+            # ==========================================================
+            "events.redditmedia.com",
+            "pixel.redditmedia.com",
+            "ads.reddit.com",
+
+            # ==========================================================
+            # Neustar / AGKN
+            # ==========================================================
+            "aa.agkn.com",
+            "secure.agkn.com",
+            "c.agkn.com",
+            "d.agkn.com",
+            "tag.agkn.com",
+            "cdn.agkn.com",
+            "pixels.agkn.com",
+
+            # ----------------------------
+            # Sentry
+            # ----------------------------
+            "browser.sentry-cdn.com",
+            "js.sentry-cdn.com",
+            "cdn.sentry.io",
+            "app.getsentry.com",
+
+            "ingest.sentry.io",
+            "o0.ingest.sentry.io",
+            "o1.ingest.sentry.io",
+            "o2.ingest.sentry.io",
+            "o3.ingest.sentry.io",
+            "o4.ingest.sentry.io",
+            "o5.ingest.sentry.io",
+            "o6.ingest.sentry.io",
+            "o7.ingest.sentry.io",
+            
             #----------------Ads----------------------
             "adsrvr.com",
             "casalemedia.com",
@@ -3659,7 +3778,7 @@ class _NavDelegate(NSObject):
 
             except Exception as e:
                 log(2, e)
-
+                
         except Exception as e:
             print("[NavDelegate] didFinish error:", e)
             
@@ -4579,13 +4698,29 @@ UNIFIED_DEFENSE_JS = r"""
     // ============================================================
 
     try {
+
+        const _resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+
         Object.defineProperty(Intl.DateTimeFormat.prototype, 'resolvedOptions', {
-            value: function() {
-                return { timeZone: "UTC", locale: "en-US" };
+            value: function () {
+                const opts = _resolvedOptions.call(this);
+
+                opts.timeZone = "UTC";
+                opts.locale = "en-US";
+
+                return opts;
             },
             configurable: true
         });
-    } catch(e){}
+
+        Object.defineProperty(Date.prototype, 'getTimezoneOffset', {
+            value: function () {
+                return 0;
+            },
+            configurable: true
+        });
+
+    } catch (e) {}
 
 
     // ============================================================
@@ -6570,7 +6705,7 @@ class Browser(NSObject):
         version.setAlignment_(1)
         version.setFont_(NSFont.systemFontOfSize_(12))
         version.setTextColor_(NSColor.whiteColor())
-        version.setStringValue_("Version 7.0.6")
+        version.setStringValue_("Version 7.0.7")
 
         panel.addSubview_(version)
 
