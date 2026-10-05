@@ -25,7 +25,7 @@ from urllib.parse import urlparse, unquote, quote_plus
 from Quartz import CABasicAnimation
 from Security import *
 
-from darkelf_pages import HOMEPAGE_HTML, UNIFIED_DEFENSE_JS, homepage_html_for_accent
+from .darkelf_pages import HOMEPAGE_HTML, UNIFIED_DEFENSE_JS, homepage_html_for_accent
 from darkelf_policy import *
 from darkelf_utils import *
 from darkelf_pq import *
