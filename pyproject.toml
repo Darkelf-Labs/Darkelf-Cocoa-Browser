@@ -32,4 +32,4 @@ classifiers = [
 keywords = ["browser", "privacy", "macos", "cocoa"]
 
 [project.scripts]
-darkelf = "darkelf_cocoa.main:run" this is my damn new file should be 7.0.20!!!
+darkelf = "darkelf_cocoa.main:run" 
