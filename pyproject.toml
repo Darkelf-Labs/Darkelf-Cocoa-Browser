@@ -1,35 +1,35 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+ [build-system]
+ requires = ["setuptools>=61.0"]
+ build-backend = "setuptools.build_meta"
 
-[project]
-name = "darkelf-cocoa"
-version = "7.0.19"
-description = "Darkelf Cocoa privacy browser for macOS"
-readme = "README.md"
-requires-python = ">=3.11"
+ [project]
+ name = "darkelf-cocoa"
+ version = "4.4.3"
+ description = "Darkelf Cocoa privacy browser for macOS"
+ readme = "README.md"
+ requires-python = ">=3.11"
 
-authors = [
-  { name = "Dr. Kevin Moore" }
+ authors = [
+   { name = "Dr. Kevin Moore" }
+ ]
+
+ license = { text = "LGPL-3.0-or-later" }
+
+ dependencies = [
+   "pyobjc",
+   "tldextract"
+ ]
+
+ [project.scripts]
+ # main browser command
+ darkelf = "darkelf_cocoa.main:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["darkelf_cocoa*"]
+
+[tool.setuptools.package-data]
+darkelf_cocoa = [
+    "assets/*",
+    "assets/**/*"
 ]
-
-license = { text = "LGPL-3.0-or-later" }
-
-dependencies = [
-  "pyobjc",
-  "tldextract"
-]
-
-# ✅ Add classifiers (important for PyPI)
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Operating System :: MacOS",
-  "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
-]
-
-# ✅ Optional but recommended
-keywords = ["browser", "privacy", "macos", "cocoa"]
-
-[project.scripts]
-darkelf = "darkelf_cocoa.main:run"
