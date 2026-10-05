@@ -33,3 +33,16 @@ keywords = ["browser", "privacy", "macos", "cocoa"]
 
 [project.scripts]
 darkelf = "darkelf_cocoa.main:run" 
+
+[project.scripts]
+darkelf = "darkelf_cocoa.main:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["darkelf_cocoa*"]
+
+[tool.setuptools.package-data]
+darkelf_cocoa = [
+    "assets/*",
+    "assets/**/*"
+]
