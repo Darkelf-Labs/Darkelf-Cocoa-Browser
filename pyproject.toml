@@ -24,7 +24,6 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Operating System :: MacOS",
-  "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
 ]
 
 keywords = ["browser", "privacy", "macos", "cocoa"]
@@ -41,4 +40,3 @@ darkelf_cocoa = [
   "assets/*",
   "assets/**/*"
 ]
-
