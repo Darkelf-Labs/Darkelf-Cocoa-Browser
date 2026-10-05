@@ -2,7 +2,7 @@
 
 ### Ephemeral, Privacy‑First macOS Browser (PyObjC + WebKit)
 
-**Current Cocoa release: 7.0.19**
+**Current Cocoa release: 7.0.20**
 
 A hardened, **memory‑only** macOS browser designed for **zero
 persistence**, **tracker resistance**, **real‑time threat detection**,
