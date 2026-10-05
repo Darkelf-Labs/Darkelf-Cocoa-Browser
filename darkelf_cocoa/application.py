@@ -1703,7 +1703,7 @@ class Browser(NSObject):
         version.setAlignment_(1)
         version.setFont_(NSFont.systemFontOfSize_(12))
         version.setTextColor_(NSColor.whiteColor())
-        version.setStringValue_("Version 7.0.7")
+        version.setStringValue_("Version 7.0.16")
 
         panel.addSubview_(version)
         self.about_version_label = version
