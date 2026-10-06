@@ -279,7 +279,7 @@ A scanner finding does not by itself establish that a vulnerability is exploitab
 
 ## Release
 
-### 7.0.20
+### 7.0.21
 
 Current Cocoa release.
 
