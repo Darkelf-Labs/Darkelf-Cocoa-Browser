@@ -1,542 +1,298 @@
 # 🧿 Darkelf Cocoa Browser [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
 
-### Ephemeral, Privacy‑First macOS Browser (PyObjC + WebKit)
+**Current Release: 7.0.20**
 
-**Current Cocoa release: 7.0.20**
-
-A hardened, **memory‑only** macOS browser designed for **zero
-persistence**, **tracker resistance**, **real‑time threat detection**,
-and **post‑quantum integrity awareness** --- installable via `pip` with
-a full native GUI.
-
-> **Core promise:** Darkelf Cocoa aims to keep browsing state **in RAM
-> only** (cookies, cache, history, local storage, IndexedDB, etc.) and
-> discard it when the process exits, while applying defense‑in‑depth
-> protections against tracking and hostile automation.
-
-------------------------------------------------------------------------
-
-## Table of Contents
-
--   [Why Darkelf Cocoa](#why-darkelf-cocoa)
--   [Features](#features)
--   [Installation](#installation)
--   [Quick Start](#quick-start)
--   [Security Model](#security-model)
--   [Post‑Quantum Integrity Layer
-    (PQ)](#post-quantum-integrity-layer-pq)
--   [MiniAI Sentinel (On‑Device IDS)](#miniai-sentinel-on-device-ids)
--   [First‑Party & Tab Isolation](#first-party--tab-isolation)
--   [Downloads & File Integrity](#downloads--file-integrity)
--   [User Indicators](#user-indicators)
--   [Native Cocoa UI](#native-cocoa-ui)
--   [Platform Support](#platform-support)
--   [License](#license)
--   [Author](#author)
--   [Disclaimer](#disclaimer)
-
-------------------------------------------------------------------------
-
-## Why Darkelf Cocoa
-
-Darkelf Cocoa Browser is the macOS edition of the Darkelf‑Mini project,
-implemented with **PyObjC** bindings to Apple's **Cocoa** + **WebKit**
-frameworks.
-
-It's built for users who want: - **Ephemeral browsing** (no retained
-session artifacts) - **Aggressive tracking resistance** - **Local-only
-security monitoring** (no telemetry) - **Integrity signaling** and
-session-bound consistency checks - **Enhanced error handling** -
-**Memory chunking** - **Safe url handling**
-
-------------------------------------------------------------------------
+Darkelf Cocoa is a privacy-focused native macOS browser built with Python, PyObjC, and Apple WebKit.
 
 ## Features
 
-### 🔒 Zero‑Persistence Runtime (RAM‑Only)
+- Native macOS WebKit browser
+- Ephemeral browsing sessions
+- First-party isolation
+- Tracker and domain blocking
+- HTTP → HTTPS upgrading
+- Canvas and fingerprinting defenses
+- WebRTC privacy protection
+- Media permission controls
+- TLS trust monitoring
+- Darkelf MiniAI security monitoring
+- PQ session integrity protections
+- Automatic security lockdown
+- Content Rule List filtering
+- Native tabs, downloads, bookmarks, and keyboard shortcuts
 
--   No disk-backed cookies/cache/history/local storage
--   Uses **non‑persistent WebKit data stores**
--   Designed to discard browsing data automatically when the app exits
+## MiniAI Security
 
-### 🚫 Tracker & Telemetry Resistance
+Darkelf MiniAI monitors browser activity for:
 
--   Built‑in content blocking rules (WebKit Content Rule Lists)
--   Additional DOM/CSS suppression for common banners/ads and nuisance
-    overlays
--   Optional protocol/scheme restrictions (blocks risky schemes like
-    `file:`, `ftp:`, `javascript:`)
+- Trackers and suspicious domains
+- Fingerprinting attempts
+- Automated scanners and scraping
+- Brute-force and credential-stuffing patterns
+- Traffic and domain anomalies
+- Suspicious URL and path activity
 
-### 🧬 Isolation by Design
+### Automatic Lockdown
 
--   **First‑Party Isolation (FPI)**: compartmentalized storage by site
--   Optional **tab‑level isolation** for stronger separation
--   Reduces cross‑site correlation and session leakage risk
+When critical activity exceeds the configured threshold, Darkelf:
 
-### 🧠 On‑Device Threat Detection (MiniAI Sentinel)
+- Stops loading across active tabs
+- Temporarily disables navigation controls
+- Maintains the lockdown for the configured duration
+- Automatically restores browser controls when lockdown expires
 
--   Local intrusion/abuse heuristics
--   Tracks suspicious navigation patterns, scanners, credential stuffing
-    behaviors, and fingerprinting indicators
--   Automatic **lockdown mode** when critical threat thresholds are met
--   No external reporting or analytics
+## Privacy Architecture
 
-### 🔗 Post‑Quantum Integrity Awareness (PQ Layer)
+Darkelf Cocoa uses:
 
--   Deterministic, session‑bound request integrity signals using
-    **SHA3**
--   Behavioral anomaly checks and entropy scoring
--   Trust-change awareness via TLS certificate tracking (TOFU‑style)
+- Ephemeral WebKit data storage
+- Isolated browsing state
+- Restricted media permissions
+- JavaScript and WebKit policy controls
+- Network inspection and tracker blocking
+- Session-scoped privacy protections
 
-------------------------------------------------------------------------
+Browsing data is designed to remain temporary rather than persist between private sessions.
 
 ## Installation
 
-``` bash
-pip install darkelf-cocoa
+Requires macOS and Python 3.11 or newer.
+
+### Install with pip
+
+```bash
+python3.11 -m pip install darkelf-cocoa
 ```
 
-------------------------------------------------------------------------
+Run Darkelf:
 
-## Quick Start
-
-``` bash
+```bash
 darkelf
 ```
 
-------------------------------------------------------------------------
+## Source Installation
 
-## Security Model
+Clone the repository:
 
-Darkelf Cocoa uses a defense‑in‑depth approach: 1. **Ephemeral storage**
-(RAM-only browsing state) 2. **Isolation** (site/tab
-compartmentalization) 3. **Content blocking** (known tracker patterns +
-nuisance suppression) 4. **On-device monitoring** (MiniAI Sentinel) 5.
-**Integrity awareness** (PQ layer + TLS trust consistency)
+```bash
+git clone https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser.git
+cd Darkelf-Cocoa-Browser
+```
 
-------------------------------------------------------------------------
+Install:
 
-## Post-Quantum Integrity Layer (PQ)
+```bash
+python3.11 -m pip install .
+```
 
-Darkelf implements a **post-quantum--aware integrity and behavioral
-verification system** using **SHA3-512 / SHA3-256** primitives.\
-This layer provides **tamper-evident, session-bound consistency
-signals** *without modifying network traffic* and is fully
-**deterministic per session/tab context**.
+Run:
 
-------------------------------------------------------------------------
+```bash
+darkelf
+```
 
-### ✅ What PQ is (in Darkelf)
+## Security Audit
 
--   **Deterministic request fingerprinting** bound to:
-    -   URL
-    -   normalized metadata (where available)
-    -   **per-tab session seed (`_pq_seed`)**
-    -   **hidden salt (`_pq_salt`) for secrecy**
-    -   time bucket (anti-replay, \~10s window)
--   Uses:
-    -   **SHA3-512** → high-entropy identity + integrity binding\
-    -   **SHA3-256** → lightweight deterministic decision logic
--   Designed to be:
-    -   stable within session context\
-    -   non-replayable across time buckets\
-    -   non-correlatable across tabs
+Darkelf Cocoa uses **Darkelf SecureAudit** to inspect WebKit and PyObjC security-sensitive code.
 
-------------------------------------------------------------------------
+The repository security workflow generates SARIF results for GitHub Code Scanning.
 
-### 🔁 PQ Chaining
+The audit checks for security-sensitive patterns including:
 
--   **Per-tab seeded chain progression**
-    -   `_pq_seed` → root identity (secure, locked per tab)
-    -   `_pq_counter` → monotonic progression (bounded, no randomness)
-    -   `darkelf_pq_chain` → request-bound continuity signal
--   Properties:
-    -   deterministic evolution (no per-request randomness)
-    -   zero fallback behavior (prevents weak entropy states)
-    -   low-noise progression safe for rendering environments
--   Purpose:
-    -   detect replay patterns\
-    -   detect navigation inconsistencies\
-    -   enforce **session continuity integrity**
+- Dynamic JavaScript execution
+- Tainted JavaScript input
+- Dynamic HTML loading
+- WebKit configuration
+- WKUserScript usage
+- WebKit KVC settings
+- Local file access
+- Navigation and UI delegates
+- Media permission handling
 
-------------------------------------------------------------------------
+Security audit findings should be reviewed in context. Informational and positive security-control detections are not vulnerabilities.
 
-### 🎨 Canvas PQ Seed Integration (NEW)
+## Automatic Security Lockdown
 
--   Canvas entropy is **bound to PQ identity** via:
-    -   `get_canvas_seed(tab)` → derived from `_pq_seed`
--   Behavior:
-    -   deterministic per tab/session
-    -   stable rendering output within session
-    -   isolated across tabs
--   Security effect:
-    -   prevents cross-site canvas fingerprint correlation\
-    -   preserves entropy while eliminating global fingerprinting
-        vectors\
-    -   aligns rendering layer with PQ integrity model
+Darkelf MiniAI can activate lockdown when critical activity reaches the configured threshold.
 
-------------------------------------------------------------------------
+During lockdown:
 
-### 🕵️ Minimal Deception Layer (Third-Party Contexts)
+1. Active WebKit loading is stopped.
+2. Browser navigation controls are temporarily disabled.
+3. The lockdown timer begins.
+4. Network activity remains subject to Darkelf security policy.
+5. Browser controls are automatically restored when the lockdown expires.
 
--   Applies only in **third-party** situations
+The previous internal HTML threat-report console is no longer used.
 
--   Triggered only when PQ fingerprint is present
+## Network Security
 
--   **Fully deterministic (no randomness)**
+Darkelf provides native network-policy controls including:
 
--   Mechanism:
+- HTTP → HTTPS upgrading
+- Suspicious protocol blocking
+- Tracker-domain blocking
+- URL inspection
+- First-party context monitoring
+- Session-level network metadata
+- PQ integrity metadata
+- Adaptive security decisions
 
-    -   derives alternate signal (`_pq_fp_alt`) from PQ state + host
-    -   extremely low activation frequency (bit-gated)
+Dangerous navigation schemes such as `file:`, `ftp:`, and `javascript:` are restricted by the browser navigation policy.
 
--   Purpose:
+## Fingerprinting Protection
 
-    -   reduce tracker confidence
-    -   degrade correlation accuracy
-    -   avoid detectable noise patterns
+Darkelf includes defenses for common browser fingerprinting surfaces, including:
 
-------------------------------------------------------------------------
+- Canvas
+- WebGL
+- Audio
+- Fonts
+- Battery information
+- Geolocation
+- Media devices
+- WebRTC
 
-### 🧠 PQ Behavioral Intelligence
+Protections may use blocking, isolation, spoofing, or controlled responses depending on the browser component and context.
 
--   Sliding window tracking (`_pq_window`)
+## First-Party Isolation
 
--   Unique fingerprint tracking (`_pq_seen`)
+Darkelf maintains browsing context information on a per-tab and first-party basis.
 
--   Entropy-based anomaly scoring (realistic thresholds)
+This helps reduce unwanted state sharing between unrelated sites and supports Darkelf's privacy and network-policy systems.
 
--   Detection signals:
+## PQ Session Integrity
 
-    -   excessive uniqueness → suspicious session behavior\
-    -   high short-window entropy → automation / replay patterns
+Darkelf includes experimental session-level PQ integrity mechanisms.
 
--   PQ contributes to:
+These protections use session-specific cryptographic state to assist with:
 
-    -   `suspicious_hits`
-    -   overall threat score
-    -   **PQ-specific risk indicator**
+- Session integrity monitoring
+- Per-tab security state
+- Network-event correlation
+- Trust-change detection
+- Adaptive MiniAI analysis
 
-------------------------------------------------------------------------
+PQ metadata is maintained within the Darkelf security architecture and is not intended to replace standard TLS.
 
-### 🔐 TLS Trust Awareness (TOFU-Style)
+## TLS Security
 
--   Tracks server certificate subject summaries per host
+Darkelf uses WebKit and macOS security APIs for HTTPS certificate handling and trust evaluation.
 
--   Detects trust changes within a session (TOFU model)
+The browser can monitor server-trust state and surface trust changes through its security interface.
 
--   Integration:
+## Ephemeral Browsing
 
-    -   combined with PQ session continuity signals
-    -   feeds UI trust indicators
+Darkelf is designed around temporary browsing state.
 
--   UI behavior:
+WebKit ephemeral storage and Darkelf session isolation reduce persistent browser data between private browsing sessions.
 
-    -   stable trust → normal PQ indicator\
-    -   changed trust → warning indicator
+## Content Filtering
 
-------------------------------------------------------------------------
+Darkelf uses WebKit Content Rule Lists and native policy controls to reduce unwanted network activity.
 
-### 🆕 PQ Canonicalization (NEW)
+Filtering is designed to complement the browser's privacy and security protections rather than replace WebKit's built-in security model.
 
--   All PQ inputs are normalized before hashing:
-    -   path normalization (`// → /`)
-    -   sorted query parameters
-    -   header normalization (excluding `_pq_*` fields)
--   Purpose:
-    -   eliminate attacker-controlled entropy variance\
-    -   ensure stable identity across equivalent requests
+## Media Permissions
 
-------------------------------------------------------------------------
+Darkelf applies explicit WebKit media-permission handling.
 
-### 🆕 PQ Replay Memory (NEW)
+Camera, microphone, and related browser permissions are controlled through the browser's native WebKit delegate architecture.
 
--   Maintains a bounded sliding window of recent chain values
-    (`_pq_chain_seen`)
--   Detects:
-    -   repeated chain states (replay)
-    -   duplicated request flows
--   Effect:
-    -   increases `suspicious_hits`
-    -   contributes to anomaly scoring
+## Native macOS Architecture
 
-------------------------------------------------------------------------
+Darkelf Cocoa is built around native Apple technologies:
 
-### 🆕 Adaptive PQ Enforcement (NEW)
+- macOS
+- Apple WebKit
+- Cocoa
+- Foundation
+- AppKit
+- Security framework
+- Python
+- PyObjC
 
-PQ signals influence request handling indirectly:
+Darkelf Cocoa does not require Chromium or QtWebEngine.
 
--   medium PQ risk → degraded identity signals\
+## Requirements
 
--   high PQ risk → PQ identity stripped (isolation behavior)
+- macOS
+- Python 3.11+
+- PyObjC
+- Apple WebKit
 
--   Purpose:
+## Repository Structure
 
-    -   reduce tracking reliability under suspicious conditions\
-    -   prevent stable identity exposure during anomalies
+```text
+darkelf_cocoa/
+├── application.py
+├── browser.py
+├── darkelf_branding.py
+├── darkelf_content_rules.py
+├── darkelf_delegates.py
+├── darkelf_downloads.py
+├── darkelf_icons.py
+├── darkelf_isolation.py
+├── darkelf_network.py
+├── darkelf_pages.py
+├── darkelf_policy.py
+├── darkelf_pq.py
+├── darkelf_sentinel.py
+├── darkelf_spoofing.py
+├── darkelf_tabs.py
+├── darkelf_theme.py
+├── darkelf_ui.py
+├── darkelf_utils.py
+└── main.py
+```
 
-------------------------------------------------------------------------
+## Development
 
-### 🆕 Multi-Mode Deception (NEW)
+Run Darkelf directly from the repository:
 
--   Third-party deception supports multiple deterministic modes:
-    -   slight mutation (hash-derived)
-    -   truncated identity
-    -   namespace-shifted identity
--   Purpose:
-    -   prevent tracker adaptation\
-    -   avoid consistent fingerprint reconstruction
+```bash
+python3.11 -m darkelf_cocoa.main
+```
 
-------------------------------------------------------------------------
+Install the local package:
 
-### 🆕 Identity Rotation (NEW)
+```bash
+python3.11 -m pip install .
+```
 
--   Long sessions trigger deterministic seed rotation:
-    -   `_pq_seed → SHA3-256(_pq_seed)`
-    -   resets `_pq_counter`
--   Purpose:
-    -   limit long-term correlation\
-    -   preserve short-term session continuity
+## Security Scanning
 
-------------------------------------------------------------------------
+Darkelf Cocoa is scanned with the Darkelf SecureAudit project.
 
-### 🆕 Observable Effects (User-Level)
+The GitHub Actions security workflow scans the `darkelf_cocoa` package and uploads SARIF output to GitHub Code Scanning.
 
-While PQ operates internally, its effects may be visible:
+Security findings are categorized as:
 
--   fingerprinting tests may produce inconsistent results\
--   cross-site tracking may fail or reset\
--   different tabs behave as isolated identities\
--   unusual activity may trigger degraded or restricted behavior\
--   TLS trust changes may surface as warnings
+| Category | Meaning |
+| --- | --- |
+| HIGH | Potential security-sensitive issue requiring review |
+| MEDIUM | Potentially unsafe or unusual implementation requiring review |
+| INFO | Security-relevant implementation detected |
+| GOOD | Positive security control detected |
 
-------------------------------------------------------------------------
+A scanner finding does not by itself establish that a vulnerability is exploitable.
 
-### 🧠 PQ Summary Model (Updated)
+## Release
 
-PQ operates as a unified system combining:
+### 7.0.20
 
--   **Integrity Layer** → tamper-evident request binding\
--   **Continuity Layer** → per-tab chain progression\
--   **Anti-Correlation Layer** → deterministic third-party signal
-    degradation\
--   **Behavioral Intelligence Layer** → entropy-based anomaly detection\
--   **Rendering Isolation Layer** → canvas bound to PQ seed\
--   **Trust Awareness Layer** → TLS consistency monitoring\
--   **Canonicalization Layer** → stable input normalization\
--   **Replay Protection Layer** → duplicate chain detection\
--   **Adaptive Layer** → risk-driven signal degradation
+Current Cocoa release.
 
-------------------------------------------------------------------------
-
-## MiniAI Sentinel (On-Device IDS)
-
-### Detects (heuristic signals)
-
--   Trackers and third-party correlation attempts
--   Fingerprinting indicators (canvas/webgl/audio keywords & patterns)
--   Scraping/bot-like navigation patterns
--   Credential stuffing-like bursts against login endpoints
--   Scanner-like domain velocity patterns
--   Suspicious URL encodings / traversal probes
-
-### Automatic Lockdown Mode
-
-When critical threats exceed threshold: - Stops loading across tabs -
-Opens an internal report console (`darkelf://report`) - Temporarily
-disables navigation controls - Auto-unlocks after a defined duration
-(configurable)
-
-> MiniAI runs locally. No telemetry, analytics, or network beacons are
-> included.
-
-------------------------------------------------------------------------
-
-## First‑Party & Tab Isolation
-
--   Storage is separated by an eTLD+1 approximation (with an auth
-    whitelist for common login flows)
--   Optional tab-level compartmentalization for stricter isolation
--   Designed to prevent cross-site storage reuse and reduce tracking
-    surface
-
-------------------------------------------------------------------------
-
-## Downloads & File Integrity
-
-### Safe-by-default behavior
-
--   Download routing can be restricted to avoid persistence
--   Temporary download directories can be wiped
-
-### File integrity protection
-
--   Downloads can be hashed with **SHA3** and bound to the session PQ
-    chain
--   In-memory hash registry enables within-session integrity checks for
-    downloaded artifacts
-
-------------------------------------------------------------------------
-
-## User Indicators
-
--   `PQ✓` → TLS secure + PQ integrity active (stable)
--   `PQ⚠` → trust anomaly detected (e.g., TLS trust change during
-    session)
-
-------------------------------------------------------------------------
-
-## 🎨 Fingerprint System (Enhanced)
-
-### PQ-Based Identity
-
-Each tab now uses a **deterministic, hidden identity** derived from an
-internal PQ seed:
-
--   Stable within a tab session\
--   Independent across tabs\
--   Not exposed to websites
-
-### Rotation Model
-
--   Fingerprints remain stable on reload\
--   New tabs receive distinct identities\
--   Gradual variation over time and navigation
-
-### Result
-
--   Prevents cross-tab tracking\
--   Avoids unstable or overly-random behavior
-
-------------------------------------------------------------------------
-
-## 🧩 Fingerprint Coherence
-
--   Canvas, WebGL, and font signals are now aligned\
--   Eliminated inconsistent or conflicting fingerprint traits
-
-### Result
-
--   Coherent, realistic device fingerprint\
--   Reduced detection via cross-surface mismatch
-
-------------------------------------------------------------------------
-
-## 🕶️ User-Agent Stealth
-
--   Removed all Darkelf identifiers from the User-Agent
-
-### Result
-
--   Appears as a standard WebKit/macOS client\
--   Internal identity system remains fully hidden
-
-------------------------------------------------------------------------
-
-## 🔐 Internal Improvements
-
--   Hidden identity grouping (not externally visible)\
--   Navigation-based entropy (no JS-driven mutation)\
--   Stable, non-reactive fingerprint behavior
-
-## ⚙️ JavaScript Hardening (PQ Unified)
-
--   All JS privacy surfaces aligned under PQ-seeded entropy
-
--   Consistent spoofing across:
-
-    -   Canvas
-    -   WebGL
-    -   Font fingerprinting
-
-------------------------------------------------------------------------
-
-## 🔁 Fingerprint Isolation
-
-### Per-Tab Identity Model
-
--   🔁 Deterministic per-tab identity
--   Group-based identity distribution (bucketed)
--   No cross-tab fingerprint reuse
-
-### Result
-
--   Eliminates cross-tab correlation vectors
--   Prevents long-session fingerprint linking
--   Creates overlapping identity clusters (crowd blending)
-
-## Native Cocoa UI
-
-Darkelf Cocoa uses a native macOS interface built with Cocoa/AppKit and
-WebKit.
-
-### Unified Accent System
-
--   **Darkelf green is the default accent on every clean launch**
--   Optional Green, Blue, Purple, Orange, Red, Teal, and custom accent
-    selection
--   Accent changes are applied live across the current session
--   Synchronized accent treatment across:
-    -   Darkelf Home title, glow, background atmosphere, and MiniAI
-        Sentinel branding
-    -   active tabs and tab hover states
-    -   address-bar border and selection treatment
-    -   navigation/button hover states
-    -   Bookmarks, Keyboard, and About panels
-    -   side-panel borders and applicable controls
--   Destructive actions such as **Nuke Session** retain semantic warning
-    colors
-
-### Native Toolbar
-
--   SVG-based Back, Forward, Reload, Bookmark, and collapsible Menu
-    controls
--   Back/Forward controls reflect navigation availability
--   Dynamic bookmark icon and tooltip state
--   Address field supports a responsive width up to **1200 px**
--   Secondary controls are kept in the collapsible side menu for a
-    cleaner browser chrome
-
-### Darkelf Contextual Search
-
--   Darkelf owns the address-field contextual search path
--   Selected text can be searched with DuckDuckGo in a **new Darkelf
-    tab**
--   Designed to avoid handing contextual searches to the system default
-    browser
-
-### Side Panels
-
--   Top-aligned Bookmarks, Keyboard Shortcuts, and About views
--   Layout follows the live side-panel bounds instead of fixed-height
-    positioning
--   Panel accents update with the current session theme
-
-### Modular Cocoa Architecture
-
-The Cocoa browser is split into focused modules for application/UI
-orchestration, WebKit delegates, network policy, content rules,
-downloads, PQ identity, isolation, spoofing, MiniAI Sentinel, tabs,
-pages, SVG/icon handling, theme settings, and branding.
-
-------------------------------------------------------------------------
+This release includes the current native macOS browser architecture, MiniAI monitoring, privacy protections, WebKit security controls, PQ session integrity features, and automated security auditing.
 
 ## License
 
-**LGPL-3.0-or-later**
+Darkelf Cocoa Browser is licensed under the **GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)**.
 
-------------------------------------------------------------------------
+See the repository license for the complete terms.
 
-## Author
+## Darkelf Labs
 
-Dr. Kevin Moore (2025--2026)
+Developed by **Dr. Kevin Moore / Darkelf Labs**.
 
-------------------------------------------------------------------------
-
-## Disclaimer
-
-This project is security-focused software provided **without
-warranty**.\
-If you distribute binaries or integrate cryptographic components beyond
-Apple's platform frameworks, you are responsible for applicable
-compliance (export controls, local regulations, etc.).
+Darkelf Cocoa focuses on native macOS browsing, privacy isolation, fingerprinting resistance, and lightweight browser security monitoring.
