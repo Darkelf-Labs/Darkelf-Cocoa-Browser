@@ -1,6 +1,6 @@
 # 🧿 Darkelf Cocoa Browser [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
 
-**Current Release: 7.0.20**
+**Current Release: 7.0.21**
 
 Darkelf Cocoa is a privacy-focused native macOS browser built with Python, PyObjC, and Apple WebKit.
 
