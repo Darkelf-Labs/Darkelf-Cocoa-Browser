@@ -1,162 +1,54 @@
 # 🧿 Darkelf Cocoa Browser [![PyPI Downloads](https://static.pepy.tech/personalized-badge/darkelf-cocoa?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/darkelf-cocoa)
 
-## Darkelf Cocoa 7.0.22 — 2026
+## Darkelf Cocoa 7.0.23 — 2026
 
-### Ephemeral • Privacy-First • Post-Quantum Integrity • Native macOS Cocoa
+**Ephemeral • Privacy-First • Post-Quantum Integrity • Native macOS Cocoa**
 
-Darkelf Cocoa is a privacy-focused macOS browser built with **PyObjC + WebKit**. It combines ephemeral browsing, first-party isolation, deterministic privacy defenses, a Post-Quantum Integrity Layer (PQ), content filtering, and the on-device **MiniAI Sentinel** security engine.
+Darkelf Cocoa is a privacy-focused macOS browser built with **PyObjC + WebKit**. It combines ephemeral browsing, first-party isolation, fingerprinting defenses, content filtering, Post-Quantum integrity state, and the local **MiniAI Sentinel** security engine.
 
-> **Current release:** 7.0.22  
+> **Current release:** 7.0.23  
 > **Platform:** macOS  
 > **Interface:** Native Cocoa / WebKit  
-> **Release year:** 2026
+> **Distribution:** DMG
 
----
+## ✨ What's New in 7.0.23
 
-## ✨ What's New in 7.0.22
+- Added an integrated **Background** settings panel.
+- Added nine Darkelf Home backgrounds: **Darkelf Glow, Midnight, Aurora, Nebula, Carbon, Pure Black, Deep Ocean, Crimson Eclipse, and Emerald Matrix**.
+- Background selection now updates the Darkelf Home page immediately.
+- Improved **Accent Color** navigation with an integrated in-panel selector.
+- Refined menu panel sizing, navigation, and Back-button behavior.
+- Fixed Background controls appearing in unrelated **MiniAI** and **About** views.
+- Improved MiniAI report spacing and panel layout.
+- Refined tab hover behavior to avoid obscuring tab titles.
 
-### 🌐 Compatibility
+## 🛡️ Privacy & Security
 
-- Improved Cloudflare and verification-flow compatibility.
-- FshareTV verification now works without disabling Darkelf's normal first-party defenses.
-- Improved **EFF Cover Your Tracks** compatibility so its fingerprinting test can complete normally.
-- Verification/challenge frames receive narrowly scoped compatibility handling instead of globally weakening browser protections.
-- Refined site compatibility while retaining Darkelf's ephemeral architecture.
+Darkelf Cocoa includes:
 
-### 🎯 Content Rules 15.04
+- Ephemeral WebKit website data stores.
+- First-party and tab/container isolation.
+- Canvas, WebGL, WebGPU, and audio fingerprint defenses.
+- WebRTC blocking.
+- Battery, timezone, and locale normalization.
+- Tracker and advertising-domain blocking.
+- HTTP → HTTPS upgrading where applicable.
+- Per-session Post-Quantum integrity state.
+- Local MiniAI behavioral security monitoring.
+- Targeted compatibility handling for verification/challenge flows.
+- No telemetry.
 
-- Updated the WebKit content-rule engine to **15.04**.
-- Improved compatibility-focused rule handling.
-- Anti-adblock subscription remains disabled to reduce challenge and verification breakage.
-- Network-level ad/tracker blocking remains active.
-- Cosmetic filtering is handled conservatively to reduce page-layout regressions.
-- Added CNN-safe cosmetic-filter handling while preserving network blocking.
-
-### 🎨 Cocoa Interface & Accent Handling
-
-- Removed legacy forced-green native Cocoa accent behavior.
-- Darkelf's selected accent now propagates across its custom interface.
-- Tabs, URL bar, borders, icons, menu elements, and the Darkelf home page follow the selected Darkelf accent.
-- Native macOS controls respect the user's actual macOS system accent.
-- Custom Darkelf theming no longer permanently overrides the user's system Accent Color.
-- Improved theme refresh behavior during live accent changes.
-
-### 🛡️ Fingerprint & Browser Defenses
-
-Darkelf retains its unified privacy-defense layer for normal browsing, including:
-
-- Canvas readback protection and deterministic noise.
-- WebGL parameter/readback protection.
-- WebGPU adapter, limit, and mapped-buffer defenses.
-- Audio fingerprint perturbation.
-- WebRTC hard blocking.
-- Battery API normalization.
-- Timezone and locale normalization.
-- PQ-linked deterministic entropy.
-- Per-origin and per-tab privacy state.
-- Compatibility guards for verification/challenge contexts.
-
----
-
-## 🔐 Post-Quantum Integrity Layer
-
-Darkelf's PQ layer maintains stateful integrity information during browsing.
-
-Core components include:
-
-- Per-session cryptographic seed.
-- Hidden session salt.
-- Per-tab identity state.
-- Stateful request chaining.
-- Replay-anomaly detection.
-- Deterministic privacy seeds derived from PQ state.
-- Isolation between browsing contexts.
-
-The PQ system is designed as an integrity and privacy mechanism inside Darkelf; it does not replace HTTPS/TLS.
-
----
-
-## 🕶️ Ephemeral Browsing
-
-Darkelf is designed around nonpersistent browsing sessions.
-
-- Nonpersistent WebKit website data stores.
-- First-party isolation.
-- Tab/container isolation.
-- No intentional cross-session browsing identity.
-- Controlled user-initiated downloads.
-- Session cleanup on exit.
-- Reduced persistent browser state.
-
----
+The Post-Quantum Integrity Layer supplements Darkelf's browser privacy and integrity mechanisms; it does **not** replace HTTPS/TLS.
 
 ## 🧠 MiniAI Sentinel
 
-MiniAI Sentinel is Darkelf's local behavioral security engine.
+MiniAI operates locally and monitors signals including tracker activity, fingerprinting, suspicious requests, replay anomalies, scraping/enumeration behavior, and navigation risk.
 
-It monitors browser activity for signals such as:
+## 🎨 Native Cocoa Interface
 
-- Tracker activity.
-- Fingerprinting behavior.
-- Suspicious request patterns.
-- Replay anomalies.
-- Scraping/enumeration behavior.
-- Elevated navigation risk.
+Darkelf Cocoa provides a native macOS interface with a custom tab bar, integrated URL/search field, bookmarks, keyboard shortcuts, Find bar, MiniAI report, session nuke control, JavaScript control, configurable accents, configurable backgrounds, and fullscreen support.
 
-MiniAI works locally with Darkelf's network and PQ systems and does not require telemetry to provide its browser-side detection functions.
-
----
-
-## 🛡️ Network Policy Engine
-
-Darkelf's network layer provides:
-
-- HTTP → HTTPS upgrading where applicable.
-- Tracker/domain blocking.
-- Adaptive trust handling.
-- PQ-aware request state.
-- Controlled download handling.
-- MiniAI integration.
-- Compatibility handling for verification services.
-
-When suspicious behavior is detected, Darkelf can reduce trust and restrict selected capabilities rather than immediately breaking the browsing session.
-
----
-
-## ⬇️ Downloads
-
-Downloads are user initiated and policy controlled.
-
-- No intentional silent background downloads.
-- Manual save workflow.
-- Temporary download handling.
-- Filename sanitization/randomization where applicable.
-- Risk-aware handling through the network/security layer.
-
----
-
-## 🎨 Darkelf Interface
-
-Darkelf Cocoa uses a native macOS interface with:
-
-- Native Cocoa window and controls.
-- Custom tab bar.
-- Integrated URL/search field.
-- Darkelf Home page.
-- Configurable Darkelf accent colors.
-- Bookmarks.
-- Keyboard shortcuts.
-- Movable Find bar.
-- MiniAI report.
-- Session nuke control.
-- JavaScript control.
-- Fullscreen support.
-
-Darkelf's custom accent and the user's native macOS Accent Color are intentionally treated separately where macOS controls require the system appearance.
-
----
-
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Shortcuts
 
 | Shortcut | Action |
 |---|---|
@@ -167,81 +59,14 @@ Darkelf's custom accent and the user's native macOS Accent Color are intentional
 | `⌘F` | Find in Page |
 | `ESC` | Close Find Bar |
 | `⌃⌘F` | Toggle Fullscreen |
-| `⌘+` | Zoom In |
-| `⌘-` | Zoom Out |
+| `⌘+` / `⌘-` | Zoom In / Out |
 | `⇧⌘X` | Exit Darkelf |
-
----
-
-## 🧩 Architecture
-
-Darkelf Cocoa is organized into dedicated modules for:
-
-- Application lifecycle and native Cocoa UI.
-- WebKit content rules.
-- Network policy.
-- First-party isolation.
-- Post-Quantum integrity state.
-- MiniAI Sentinel.
-- Fingerprint/privacy defenses.
-- Spoofing and compatibility handling.
-- Downloads.
-- Tabs and delegates.
-- Theme and branding.
-- Internal Darkelf pages.
-
-This modular architecture keeps browser UI, privacy policy, network enforcement, and security analysis separated.
-
----
-
-## 🔏 Privacy Principles
-
-Darkelf 7.0.22 is built around these principles:
-
-- Ephemeral by default.
-- No telemetry.
-- No persistent cross-session browser identity by design.
-- First-party isolation.
-- Per-tab privacy state.
-- Tracker and advertising-domain blocking.
-- Fingerprint-surface hardening.
-- WebRTC leakage prevention.
-- Narrow compatibility exceptions instead of globally disabling protections.
-- User-controlled data egress.
-
----
 
 ## 📦 Distribution
 
-Darkelf Cocoa 7.0.22 is distributed as a native **macOS DMG** release.
+Darkelf Cocoa 7.0.23 is distributed as a native **macOS DMG**.
 
-The release source is prepared for the current native Cocoa/DMG distribution workflow.
-
----
-
-## 🧪 7.0.22 Release Validation
-
-Before publishing a release build, the project should be checked with:
-
-- Python syntax/compile checks.
-- Ruff linting.
-- Bandit security analysis.
-- GitHub CodeQL analysis.
-- macOS code signing verification.
-- Apple notarization verification.
-- DMG checksum verification.
-- Browser compatibility tests.
-- Privacy/fingerprinting tests.
-
----
-
-## ⚠️ Compatibility Notes
-
-Privacy hardening can conflict with websites that rely on exact browser fingerprint, layout, media, or verification behavior. Darkelf 7.0.22 uses targeted compatibility handling where possible rather than disabling privacy protections globally.
-
-CNN currently has a known top-header/layout compatibility issue under investigation. Network-level filtering and the broader browser privacy stack remain enabled.
-
----
+Release builds should pass Python compile checks, lint/security analysis, macOS code-signing verification, Apple notarization, checksum verification, browser compatibility testing, and privacy/fingerprinting testing.
 
 ## 📜 License
 
