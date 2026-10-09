@@ -16,7 +16,7 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 
 ### 🛡️ Improved Ad and Tracker Blocking
 
-- Updated the content-filtering implementation to **Content Rules v15.07**.
+- Updated the content-filtering implementation to **Content Rules v15.08**.
 - Expanded integration of supported EasyList network-filter rules with WebKit's native content-rule compilation.
 - Improved cosmetic filtering to hide more empty advertising containers and leftover page elements.
 - Improved content-rule installation handling when asynchronous compilation completes, including content controllers for existing tabs.
