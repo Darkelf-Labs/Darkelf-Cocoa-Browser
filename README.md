@@ -1,7 +1,7 @@
 
 # 🧿 Darkelf Cocoa Browser
 
-[![Monthly Downloads](https://img.shields.io/pypi/dm/darkelf-cocoa?label=Monthly%20Downloads&color=brightgreen)](https://pypistats.org/packages/darkelf-cocoa)
+[![Monthly Downloads](https://img.shields.io/pypi/dm/darkelf-cocoa?label=Monthly%20Downloads&color=brightgreen&cacheSeconds=300)](https://pypistats.org/packages/darkelf-cocoa)
 
 [![Weekly Downloads](https://img.shields.io/pypi/dw/darkelf-cocoa?label=Weekly%20Downloads&color=brightgreen)](https://pypistats.org/packages/darkelf-cocoa)
 
