@@ -109,6 +109,12 @@ The v7.0.27 cosmetic cleanup and Content Rules v15.08 aim to reduce leftover ad 
 
 The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.0.27 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
 
+## 🔗 Official Links & Download Statistics
+
+- **Official website:** [darkelfbrowser.com](https://darkelfbrowser.com/)
+- **GitHub releases:** [Darkelf Cocoa Browser releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases)
+- **PyPI download statistics (weekly view):** [Darkelf Cocoa on PePy](https://www.pepy.tech/projects/darkelf-cocoa) — select the weekly timeframe on PePy.
+
 ## 📜 License
 
 **LGPL-3.0-or-later**. See the repository's license and third-party notices for details.
