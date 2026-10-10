@@ -1,21 +1,18 @@
-
 # 🧿 Darkelf Cocoa Browser
 
-[![Weekly Downloads](https://img.shields.io/pypi/dw/darkelf-cocoa?label=Weekly%20Downloads&color=brightgreen)](https://pypistats.org/packages/darkelf-cocoa)
-
-## Darkelf Cocoa v7.0.26 — Stable Release
+## Darkelf Cocoa v7.0.27 — Stable Release
 
 **Ephemeral • Privacy-First • Native macOS Cocoa / WebKit**
 
 Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC, and Apple's WebKit**. It combines an ephemeral browsing architecture, fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
 
-> **Version:** 7.0.26  
-> **Release date:** October 9, 2026  
+> **Version:** 7.0.27  
+> **Release date:** October 10, 2026  
 > **Channel:** Stable  
 > **Platform:** macOS  
 > **Distribution:** DMG
 
-## ✨ What's New in v7.0.26
+## ✨ What's New in v7.0.27
 
 ### 🛡️ Improved Ad and Tracker Blocking
 
@@ -24,7 +21,13 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 - Improved cosmetic filtering to hide more empty advertising containers and leftover page elements.
 - Improved content-rule installation handling when asynchronous compilation completes, including content controllers for existing tabs.
 - Preserved compatibility-oriented exceptions and conservative cosmetic-filtering behavior.
-- **AdBlock Tester result:** 93/100 in a reported test of this development build. Scores vary with test conditions and do not guarantee identical blocking on every website.
+- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.0.27 benchmark. Scores vary with test conditions.
+
+### 🧹 Dynamic Cosmetic Ad Cleanup
+
+- Added conservative, dynamic cleanup of empty ad-slot containers after pages load.
+- Improved removal of leftover advertising spaces on sites such as CNN and GameSpot while retaining safeguards for legitimate page elements.
+- Kept compatibility-conscious WebKit content filtering and existing site exceptions.
 
 ### 🧭 Address-Bar Context Menu Fixes
 
@@ -35,9 +38,16 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 
 ### 🎨 Native Interface Refinements
 
+- Refined menu label and icon colors for improved readability.
+- Fixed hover behavior in the homepage background-theme picker.
 - Retained the streamlined native Cocoa menu and navigation design.
 - Continued support for configurable accent colors and Darkelf Home backgrounds.
 - Preserved improvements to bookmarks, Privacy & Security, MiniAI, and About panels.
+
+### 💿 Branded DMG Volume
+
+- Added support in the release workflow for a custom Darkelf Cocoa icon on the mounted DMG volume.
+- The mounted-volume icon is a packaging enhancement and does not change browser privacy behavior.
 
 ## 🔒 Privacy & Security
 
@@ -86,7 +96,7 @@ The native Cocoa interface includes:
 
 ## 📦 Installation
 
-1. Open the **v7.0.26** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
+1. Open the **v7.0.27** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
 2. Download the macOS DMG asset when published.
 3. Open the DMG and install the app using the instructions included with the release.
 4. Launch Darkelf Cocoa.
@@ -95,9 +105,9 @@ The native Cocoa interface includes:
 
 ## 🧪 Testing & Compatibility
 
-The v7.0.26 filtering changes are designed to strengthen blocking while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
+The v7.0.27 cosmetic cleanup and Content Rules v15.08 aim to reduce leftover ad spaces while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
 
-The reported **93/100 AdBlock Tester** result is a single benchmark result, not a comprehensive measure of browser security, compatibility, or privacy.
+The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.0.27 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
 
 ## 📜 License
 
