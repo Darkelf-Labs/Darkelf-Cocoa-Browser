@@ -5,19 +5,36 @@
 [![PyPI Downloads](https://static.pepy.tech/badge/darkelf-cocoa)](https://pepy.tech/projects/darkelf-cocoa)
 [![Monthly Downloads](https://static.pepy.tech/badge/darkelf-cocoa/month)](https://pepy.tech/projects/darkelf-cocoa)
 
-## Darkelf Cocoa v7.1.0 — Stable Release
+## Darkelf Cocoa v7.1.1 — Stable Release
 
 **Ephemeral • Privacy-First • Native macOS Cocoa / WebKit**
 
 Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC, and Apple's WebKit**. It combines an ephemeral browsing architecture, fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
 
-> **Version:** 7.1.0  
+> **Version:** 7.1.1  
 > **Release date:** October 11, 2026  
 > **Channel:** Stable  
 > **Platform:** macOS  
 > **Distribution:** DMG
 
-## ✨ What's New in v7.1.0
+## ✨ What's New in v7.1.1
+
+### 🪟 Native Window Management and Darkelf Popover
+
+- Added a compact, Darkelf-themed **Move & Resize** popover associated with the macOS green window button.
+- Provided window positioning and arrangement controls, including left/right/top/bottom placement, fill options, and multi-window layouts.
+- Added a distinct four-window arrangement control and refined its icon to better match familiar macOS window tiling visuals.
+- Improved popover anchoring in regular and fullscreen window states, with further fixes to prevent the panel appearing at the bottom of the screen or obscuring the traffic-light controls.
+- Refined window-action keyboard handling to avoid stray Reload tooltips and accidental menu activation.
+- Kept accent-aware styling synchronized with Darkelf's selected interface color.
+- Window arrangement of **other applications** depends on macOS accessibility and automation permissions. Availability and behavior can vary by app and window state.
+
+### 🧪 v7.1.1 Development Validation
+
+- The latest development screenshots show Darkelf Cocoa arranged alongside Firefox and Terminal, with the custom popover visible.
+- The developer reported that the prior permission warning no longer appeared in the tested configuration; this does **not** guarantee permission-free operation for all users or other applications.
+- Final signed-DMG testing remains recommended before publishing.
+
 
 ### 🖱️ Darkelf-Styled Context Menus
 
@@ -48,7 +65,7 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 - Improved cosmetic filtering to hide more empty advertising containers and leftover page elements.
 - Improved content-rule installation handling when asynchronous compilation completes, including content controllers for existing tabs.
 - Preserved compatibility-oriented exceptions and conservative cosmetic-filtering behavior.
-- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.1.0 benchmark. Scores vary with test conditions.
+- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.1.1 benchmark. Scores vary with test conditions.
 
 ### 🧹 Dynamic Cosmetic Ad Cleanup
 
@@ -110,7 +127,7 @@ The native Cocoa interface includes:
 - Find in Page and keyboard shortcuts.
 - Configurable accent colors and homepage backgrounds.
 - Privacy & Security and MiniAI panels.
-- Fullscreen support and session controls.
+- Fullscreen support, accent-aware Move & Resize popover, window arrangement controls, and session controls.
 
 ## ⌨️ Keyboard Shortcuts
 
@@ -130,7 +147,7 @@ The native Cocoa interface includes:
 
 ## 📦 Installation
 
-1. Open the **v7.1.0** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
+1. Open the **v7.1.1** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
 2. Download the macOS DMG asset when published.
 3. Open the DMG and install the app using the instructions included with the release.
 4. Launch Darkelf Cocoa.
@@ -141,7 +158,7 @@ The native Cocoa interface includes:
 
 The retained cosmetic cleanup and Content Rules v15.15 aim to reduce leftover ad spaces while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
 
-The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.1.0 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
+The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.1.1 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
 
 ## 📜 License
 
