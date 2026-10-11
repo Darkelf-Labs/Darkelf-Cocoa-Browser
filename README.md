@@ -1,7 +1,7 @@
 # 🧿 Darkelf Cocoa Browser
 
-[![PyPI Version](https://img.shields.io/pypi/v/darkelf-cocoa?label=PyPI&color=blue)](https://pypi.org/project/darkelf-cocoa/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/darkelf-cocoa)](https://pypi.org/project/darkelf-cocoa/)
+[![PyPI Downloads](https://static.pepy.tech/badge/darkelf-cocoa)](https://pepy.tech/projects/darkelf-cocoa)
+[![Monthly Downloads](https://static.pepy.tech/badge/darkelf-cocoa/month)](https://pepy.tech/projects/darkelf-cocoa)
 
 ## Darkelf Cocoa v7.0.28 — Stable Release
 
