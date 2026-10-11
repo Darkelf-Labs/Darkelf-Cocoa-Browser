@@ -1,27 +1,30 @@
 # 🧿 Darkelf Cocoa Browser
 
-## Darkelf Cocoa v7.0.27 — Stable Release
+[![PyPI Version](https://img.shields.io/pypi/v/darkelf-cocoa?label=PyPI&color=blue)](https://pypi.org/project/darkelf-cocoa/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/darkelf-cocoa)](https://pypi.org/project/darkelf-cocoa/)
+
+## Darkelf Cocoa v7.0.28 — Stable Release
 
 **Ephemeral • Privacy-First • Native macOS Cocoa / WebKit**
 
 Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC, and Apple's WebKit**. It combines an ephemeral browsing architecture, fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
 
-> **Version:** 7.0.27  
-> **Release date:** October 10, 2026  
+> **Version:** 7.0.28  
+> **Release date:** October 11, 2026  
 > **Channel:** Stable  
 > **Platform:** macOS  
 > **Distribution:** DMG
 
-## ✨ What's New in v7.0.27
+## ✨ What's New in v7.0.28
 
 ### 🛡️ Improved Ad and Tracker Blocking
 
-- Updated the content-filtering implementation to **Content Rules v15.08**.
+- Updated the content-filtering implementation to **Content Rules v15.15**.
 - Expanded integration of supported EasyList network-filter rules with WebKit's native content-rule compilation.
 - Improved cosmetic filtering to hide more empty advertising containers and leftover page elements.
 - Improved content-rule installation handling when asynchronous compilation completes, including content controllers for existing tabs.
 - Preserved compatibility-oriented exceptions and conservative cosmetic-filtering behavior.
-- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.0.27 benchmark. Scores vary with test conditions.
+- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.0.28 benchmark. Scores vary with test conditions.
 
 ### 🧹 Dynamic Cosmetic Ad Cleanup
 
@@ -35,6 +38,13 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 - Prevented address-bar context-menu search actions from opening Safari.
 - Removed the macOS Services submenu from the Darkelf-controlled address-bar menu.
 - Retained the familiar **Cut, Copy, Paste, and Select All** actions.
+
+### 🎨 Accent Synchronization Across Home Tabs
+
+- Fixed a theme synchronization issue where existing **Darkelf Home** tabs retained an older accent after changing colors on an external webpage.
+- Accent changes now refresh all open Darkelf Home tabs, not only the active tab.
+- External websites remain untouched by the homepage theme refresh.
+- Homepage background selections continue to use the current theme settings.
 
 ### 🎨 Native Interface Refinements
 
@@ -96,7 +106,7 @@ The native Cocoa interface includes:
 
 ## 📦 Installation
 
-1. Open the **v7.0.27** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
+1. Open the **v7.0.28** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
 2. Download the macOS DMG asset when published.
 3. Open the DMG and install the app using the instructions included with the release.
 4. Launch Darkelf Cocoa.
@@ -105,15 +115,9 @@ The native Cocoa interface includes:
 
 ## 🧪 Testing & Compatibility
 
-The v7.0.27 cosmetic cleanup and Content Rules v15.08 aim to reduce leftover ad spaces while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
+The v7.0.28 cosmetic cleanup and Content Rules v15.15 aim to reduce leftover ad spaces while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
 
-The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.0.27 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
-
-## 🔗 Official Links & Download Statistics
-
-- **Official website:** [darkelfbrowser.com](https://darkelfbrowser.com/)
-- **GitHub releases:** [Darkelf Cocoa Browser releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases)
-- **PyPI download statistics (weekly view):** [Darkelf Cocoa on PePy](https://www.pepy.tech/projects/darkelf-cocoa) — select the weekly timeframe on PePy.
+The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.0.28 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
 
 ## 📜 License
 
