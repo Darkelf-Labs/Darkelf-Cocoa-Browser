@@ -1,21 +1,45 @@
 # 🧿 Darkelf Cocoa Browser
 
+[![PyPI Version](https://img.shields.io/pypi/v/darkelf-cocoa?label=PyPI&color=blue)](https://pypi.org/project/darkelf-cocoa/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/darkelf-cocoa)](https://pypi.org/project/darkelf-cocoa/)
 [![PyPI Downloads](https://static.pepy.tech/badge/darkelf-cocoa)](https://pepy.tech/projects/darkelf-cocoa)
 [![Monthly Downloads](https://static.pepy.tech/badge/darkelf-cocoa/month)](https://pepy.tech/projects/darkelf-cocoa)
 
-## Darkelf Cocoa v7.0.28 — Stable Release
+## Darkelf Cocoa v7.1.0 — Stable Release
 
 **Ephemeral • Privacy-First • Native macOS Cocoa / WebKit**
 
 Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC, and Apple's WebKit**. It combines an ephemeral browsing architecture, fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
 
-> **Version:** 7.0.28  
+> **Version:** 7.1.0  
 > **Release date:** October 11, 2026  
 > **Channel:** Stable  
 > **Platform:** macOS  
 > **Distribution:** DMG
 
-## ✨ What's New in v7.0.28
+## ✨ What's New in v7.1.0
+
+### 🖱️ Darkelf-Styled Context Menus
+
+- Introduced accent-aware, dark-themed context menus for the address bar and general webpage actions.
+- Kept address-bar **Cut, Copy, Paste, and Select All** actions and their standard macOS shortcuts.
+- Added general webpage actions including **Back, Forward, Reload, Copy Page URL, and Find in Page** where applicable.
+- Removed the experimental **Passwords / Autofill** menu action and its shortcut.
+- Improved context-menu handling to avoid the native macOS menu appearing alongside Darkelf's custom menu.
+- Link-specific and image-specific webpage actions are not yet implemented.
+
+### ⌨️ Keyboard Shortcuts and Native UI
+
+- Connected context-menu actions to their corresponding keyboard handlers and updated the in-app Keyboard Shortcuts panel.
+- Added **⇧⌘C** for Copy Page URL, alongside standard macOS text-editing shortcuts.
+- Replaced the native **Clear All Browsing Data?** alert with an accent-aware Darkelf confirmation panel while retaining its confirmation-before-wipe behavior.
+- Updated the Find Bar close button to follow live accent-color changes.
+
+### 🧬 Fingerprinting Protection
+
+- Preserved the original PQ-seeded fingerprinting defenses after testing experimental consistency changes.
+- Development tests of EFF Cover Your Tracks reported randomized fingerprint behavior in successful runs; results can vary and do not guarantee anonymity.
+
 
 ### 🛡️ Improved Ad and Tracker Blocking
 
@@ -24,7 +48,7 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 - Improved cosmetic filtering to hide more empty advertising containers and leftover page elements.
 - Improved content-rule installation handling when asynchronous compilation completes, including content controllers for existing tabs.
 - Preserved compatibility-oriented exceptions and conservative cosmetic-filtering behavior.
-- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.0.28 benchmark. Scores vary with test conditions.
+- **Previous AdBlock Tester result:** 93/100 in an earlier reported test; this is not a new v7.1.0 benchmark. Scores vary with test conditions.
 
 ### 🧹 Dynamic Cosmetic Ad Cleanup
 
@@ -32,12 +56,10 @@ Darkelf Cocoa is a privacy-focused browser for macOS built with **Python, PyObjC
 - Improved removal of leftover advertising spaces on sites such as CNN and GameSpot while retaining safeguards for legitimate page elements.
 - Kept compatibility-conscious WebKit content filtering and existing site exceptions.
 
-### 🧭 Address-Bar Context Menu Fixes
+### 🧭 Earlier Address-Bar Context Menu Fixes
 
-- Removed DuckDuckGo search actions from the address-bar right-click menu.
-- Prevented address-bar context-menu search actions from opening Safari.
-- Removed the macOS Services submenu from the Darkelf-controlled address-bar menu.
-- Retained the familiar **Cut, Copy, Paste, and Select All** actions.
+- Retained removal of Safari-opening search actions and the unwanted macOS Services submenu.
+- Preserved familiar text-editing actions in the updated Darkelf-styled menu.
 
 ### 🎨 Accent Synchronization Across Home Tabs
 
@@ -94,6 +116,8 @@ The native Cocoa interface includes:
 
 | Shortcut | Action |
 |---|---|
+| `⌘X` / `⌘C` / `⌘V` / `⌘A` | Cut / Copy / Paste / Select All in text fields |
+| `⇧⌘C` | Copy page URL |
 | `⌘T` | New tab |
 | `⌘W` | Close tab |
 | `⌘R` | Reload |
@@ -106,7 +130,7 @@ The native Cocoa interface includes:
 
 ## 📦 Installation
 
-1. Open the **v7.0.28** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
+1. Open the **v7.1.0** release on the [Darkelf Cocoa Browser GitHub repository](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
 2. Download the macOS DMG asset when published.
 3. Open the DMG and install the app using the instructions included with the release.
 4. Launch Darkelf Cocoa.
@@ -115,9 +139,9 @@ The native Cocoa interface includes:
 
 ## 🧪 Testing & Compatibility
 
-The v7.0.28 cosmetic cleanup and Content Rules v15.15 aim to reduce leftover ad spaces while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
+The retained cosmetic cleanup and Content Rules v15.15 aim to reduce leftover ad spaces while minimizing disruption to ordinary browsing. Before distribution, regression-test websites with video, logins, verification challenges, images, and interactive content.
 
-The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.0.28 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
+The previously reported **93/100 AdBlock Tester** result is historical and is not a new v7.1.0 benchmark or a comprehensive measure of browser security, compatibility, or privacy.
 
 ## 📜 License
 
