@@ -9,12 +9,12 @@
 
 Darkelf Cocoa is a privacy-focused browser powered by **Python, PyObjC, and Apple WebKit**. It pairs ephemeral browsing with fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
 
-**Current release: v7.1.4** · macOS · DMG distribution
+**Current release: v7.1.5** · macOS · DMG distribution
 
-## ✨ What's New in 7.1.4
+## ✨ What's New in 7.1.5
 
 - **Native Darkelf Cocoa application menu:** About, License & Attribution, PyPI, and GitHub links open in Darkelf tabs, alongside standard Hide, Hide Others, and Quit actions.
-- **Menu hover-state fix:** Prevents multiple application-menu rows from remaining highlighted at once; only the active hovered row uses the selected accent color.
+- **Menu hover-state fix (verified in v7.1.5 DMG):** Moving between application-menu rows clears previous highlights, leaving only the hovered row in the selected accent color.
 - **Link destination preview:** Hover over a webpage link to see its URL in a compact, bottom-left, accent-bordered overlay; the preview hides when the pointer leaves.
 - **Expanded shortcut reference:** The in-app Keyboard Shortcuts menu now includes `⌘H` (Hide Darkelf Cocoa), `⌥⌘H` (Hide Others), and `⌘Q` (Quit).
 - **Site-based adblocking modes (Content Rules v15.28):** DW uses a compatibility-first **TRUSTED** profile; CNN and GameSpot use **PROTECTED** profiles with network blocking and existing cosmetic cleanup; other sites use **STANDARD** blocking. TRUSTED mode relaxes protection on DW to improve compatibility.
@@ -38,7 +38,7 @@ Tabs, bookmarks, integrated address/search bar, keyboard shortcuts, customizable
 ## 📦 Install
 
 1. Visit [Darkelf Cocoa GitHub Releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
-2. Select **v7.1.4** and download its macOS DMG **when published**.
+2. Select **v7.1.5** and download its macOS DMG.
 3. Open the DMG, drag Darkelf Cocoa to Applications, and launch.
 
 The signed and notarized distribution build should be verified before publication.
