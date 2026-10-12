@@ -6536,6 +6536,18 @@ class DarkelfAccentMenuRow(NSView):
     NSMenu owns presentation/tracking; no custom panels or event monitors.
     """
 
+    # Native NSMenu tracking can skip mouseExited_ while moving between views.
+    # Enforce one active row per menu, rather than independent hover flags.
+    _active_row = None
+
+    @classmethod
+    def reset_hover(cls):
+        previous = cls._active_row
+        cls._active_row = None
+        if previous is not None:
+            previous._darkelf_hovered = False
+            previous.setNeedsDisplay_(True)
+
     def initWithTitle_actionTarget_selector_(self, title, target, selector):
         self = objc.super(DarkelfAccentMenuRow, self).initWithFrame_(
             NSMakeRect(0, 0, 265, 29)
@@ -6556,7 +6568,8 @@ class DarkelfAccentMenuRow(NSView):
         for area in list(self.trackingAreas()):
             self.removeTrackingArea_(area)
         opts = (NSTrackingMouseEnteredAndExited |
-                NSTrackingActiveInActiveApp |
+                NSTrackingMouseMoved |
+                NSTrackingActiveAlways |
                 NSTrackingInVisibleRect)
         self.addTrackingArea_(
             NSTrackingArea.alloc().initWithRect_options_owner_userInfo_(
@@ -6565,10 +6578,25 @@ class DarkelfAccentMenuRow(NSView):
         )
 
     def mouseEntered_(self, event):
-        self._darkelf_hovered = True
-        self.setNeedsDisplay_(True)
+        self._activate_hover()
+
+    def mouseMoved_(self, event):
+        self._activate_hover()
+
+    @objc.python_method
+    def _activate_hover(self):
+        previous = DarkelfAccentMenuRow._active_row
+        if previous is not None and previous is not self:
+            previous._darkelf_hovered = False
+            previous.setNeedsDisplay_(True)
+        DarkelfAccentMenuRow._active_row = self
+        if not self._darkelf_hovered:
+            self._darkelf_hovered = True
+            self.setNeedsDisplay_(True)
 
     def mouseExited_(self, event):
+        if DarkelfAccentMenuRow._active_row is self:
+            DarkelfAccentMenuRow._active_row = None
         self._darkelf_hovered = False
         self.setNeedsDisplay_(True)
 
@@ -6614,6 +6642,7 @@ class DarkelfAccentMenuRow(NSView):
         if not NSPointInRect(self.convertPoint_fromView_(event.locationInWindow(), None),
                              self.bounds()):
             return
+        DarkelfAccentMenuRow.reset_hover()
         menu = self.enclosingMenuItem().menu()
         if menu is not None:
             menu.cancelTracking()
@@ -6638,6 +6667,7 @@ def install_darkelf_application_menu(app, browser, delegate):
         app_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Darkelf Cocoa", None, "")
         main_menu.insertItem_atIndex_(app_item, 0)
 
+    DarkelfAccentMenuRow.reset_hover()
     menu = NSMenu.alloc().initWithTitle_("Darkelf Cocoa")
     menu.setAutoenablesItems_(False)
     app_item.setTitle_("Darkelf Cocoa")
