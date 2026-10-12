@@ -9,14 +9,15 @@
 
 Darkelf Cocoa is a privacy-focused browser powered by **Python, PyObjC, and Apple WebKit**. It pairs ephemeral browsing with fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
 
-**Current release: v7.1.2** · macOS · DMG distribution
+**Current release: v7.1.3** · macOS · DMG distribution
 
-## ✨ What's New in 7.1.2
+## ✨ What's New in 7.1.3
 
-- **Video compatibility restored:** ESPN, NBA, and NHL video playback confirmed working in developer testing with content filtering enabled.
-- **Adblocking maintained:** **100/100 on Adblock Tester** in the same development configuration. This is a test result, not a guarantee of universal blocking.
-- **Smarter media compatibility:** Refined WebKit content-rule exceptions to reduce disruption to supported video players.
-- **Polished Cocoa experience:** Retains Darkelf-styled context menus, accent-aware Find Bar, customizable themes, and the compact **Move & Resize** window popover introduced in 7.1.1.
+- **Native Darkelf Cocoa application menu:** About, License & Attribution, PyPI, and GitHub links open in Darkelf tabs, alongside standard Hide, Hide Others, and Quit actions.
+- **Accent-synchronized menu hover:** All seven application-menu items use Darkelf's selected accent color instead of the default macOS highlight.
+- **Link destination preview:** Hover over a webpage link to see its URL in a compact, bottom-left, accent-bordered overlay; the preview hides when the pointer leaves.
+- **Expanded shortcut reference:** The in-app Keyboard Shortcuts menu now includes `⌘H` (Hide Darkelf Cocoa), `⌥⌘H` (Hide Others), and `⌘Q` (Quit).
+- **7.1.2 compatibility improvements retained:** ESPN, NBA, and NHL video playback was confirmed in developer testing; Adblock Tester scored **100/100** in that tested configuration. Results are not universal guarantees.
 
 ## 🛡️ Privacy Features
 
@@ -30,12 +31,12 @@ Privacy protections are best-effort; no browser can guarantee anonymity or block
 
 ## 🪟 Native macOS Experience
 
-Tabs, bookmarks, integrated address/search bar, keyboard shortcuts, customizable accent colors, Darkelf Home backgrounds, fullscreen support, and native window arrangement controls.
+Tabs, bookmarks, integrated address/search bar, keyboard shortcuts, customizable accent colors, Darkelf Home backgrounds, fullscreen support, native window arrangement controls, an accent-aware macOS application menu, and an unobtrusive link destination preview.
 
 ## 📦 Install
 
 1. Visit [Darkelf Cocoa GitHub Releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
-2. Select **v7.1.2** and download its macOS DMG **when published**.
+2. Select **v7.1.3** and download its macOS DMG **when published**.
 3. Open the DMG, drag Darkelf Cocoa to Applications, and launch.
 
 The signed and notarized distribution build should be verified before publication.
@@ -49,6 +50,8 @@ The signed and notarized distribution build should be verified before publicatio
 | `⌘F` | Find in page |
 | `⇧⌘C` | Copy page URL |
 | `⌃⌘F` | Toggle fullscreen |
+| `⌘H` / `⌥⌘H` | Hide Darkelf Cocoa / Hide Others |
+| `⌘Q` | Quit Darkelf Cocoa |
 
 ## 🧪 Compatibility
 
@@ -59,4 +62,3 @@ Developer testing confirms ESPN, NBA, and NHL video playback, alongside a **100/
 **LGPL-3.0-or-later** · See repository license and third-party notices.
 
 © 2025–2026 Darkelf Labs / Dr. Kevin Moore.
-
