@@ -6,7 +6,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/darkelf-cocoa.svg)](https://pypi.org/project/darkelf-cocoa/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/darkelf-cocoa.svg)](https://pypi.org/project/darkelf-cocoa/)
 
-**Current release: v7.1.7** · **Platform: macOS** · **Engine: Apple WebKit**
+**Current release: v7.1.8** · **Platform: macOS** · **Engine: Apple WebKit**
 
 [Website](https://darkelfbrowser.com) · [Releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases) · [Source code](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser)
 
@@ -22,6 +22,7 @@ Darkelf Cocoa is a separate implementation from Darkelf Shadow CE. It uses the s
 
 - Ephemeral browsing design that avoids maintaining a conventional persistent browsing-history database.
 - Built-in tracker and advertising content-rule defenses.
+- WebKit content-rule management with improved compilation compatibility in v7.1.8.
 - Site-aware protection policies, including trusted, protected, and standard handling where supported.
 - First-party/tab isolation architecture.
 - Privacy monitoring and a MiniAI status interface.
@@ -29,7 +30,7 @@ Darkelf Cocoa is a separate implementation from Darkelf Shadow CE. It uses the s
 
 Privacy defenses reduce exposure; they do not guarantee anonymity, block every tracker, or eliminate every possible macOS forensic artifact.
 
-### 🔒 Browser Lock — v7.1.7
+### 🔒 Browser Lock
 
 An **optional Browser Lock** adds a local access check to the browser:
 
@@ -38,6 +39,7 @@ An **optional Browser Lock** adds a local access check to the browser:
 - Re-lock when the browser window is minimized to the Dock.
 - Unlock using the macOS authentication dialog, which can offer **Touch ID or the Mac account password**, depending on the device and its configuration.
 - Manage Browser Lock in **Privacy & Security**.
+- Refined locked-state menu behavior and interaction handling.
 
 Darkelf Cocoa delegates authentication to macOS **LocalAuthentication**. It does not collect or store fingerprint data or your Mac password. Browser Lock is an application-level access feature, **not disk or memory encryption**.
 
@@ -48,6 +50,8 @@ Darkelf Cocoa delegates authentication to macOS **LocalAuthentication**. It does
 - Accent-aware application/Dock icon and in-app Darkelf shield branding.
 - Native macOS appearance and window controls.
 - Integrated Find in Page, bookmarks, and download UI.
+- Custom window movement, resizing, and arrangement controls.
+- Lower-left webpage link preview.
 
 ### ⌨️ Address bar and shortcuts
 
@@ -58,16 +62,20 @@ Darkelf Cocoa delegates authentication to macOS **LocalAuthentication**. It does
 - **⌘R** — Reload; **⌘F** — Find in page.
 - Built-in Keyboard Shortcuts reference in the browser menu.
 
-## What's new in v7.1.7
+## What's new in v7.1.8
 
-- Added opt-in Browser Lock with native macOS owner authentication.
-- Added startup, inactivity, and Dock-minimization lock triggers.
-- Added a dedicated Browser Lock information view in Privacy & Security.
-- Improved accent-color consistency across Darkelf shield branding and the native interface.
-- Added **Paste and Go** to the address-bar context menu and shortcut reference (**⇧⌘V**).
-- Continued interface and stability refinements.
+- Corrected a WebKit content-rule compilation error caused by conflicting rule-trigger conditions.
+- Updated the content-rule engine to **v15.33**, ensuring a fresh compiled rule list.
+- Restored reliable adblocking initialization in the compiled macOS application.
+- Preserved site-specific compatibility handling for CNN, GameSpot, and Deutsche Welle.
+- Refined Browser Lock menu interactions and locked-state behavior.
+- Improved native application-menu handling and interface stability.
+- Continued improvements to window arrangement, link previews, and macOS integration.
+- Verified core browser functionality during pre-release smoke testing.
 
-See the [v7.1.7 release notes](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases) for the release overview.
+**Known compatibility work:** Reddit feed loading and Euronews behavior remain under investigation for a future release.
+
+See the [v7.1.8 release notes](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases) for the release overview.
 
 ## Get Darkelf Cocoa
 
@@ -85,11 +93,15 @@ The packaged macOS application and Python-launched development environment may d
 
 Darkelf Cocoa uses **PyObjC + AppKit** for the native interface and **WKWebView/WebKit** for page rendering. Browser components are separated across modules for UI, tabs, policies, content rules, first-party isolation, monitoring, branding, and themes.
 
+Its content-blocking architecture combines WebKit content-rule lists, site-aware compatibility handling, and an isolated Sentry rule manager.
+
 It relies on the WebKit functionality provided by macOS; support for particular media formats, DRM systems, and websites may vary with the operating system and WebKit implementation.
 
 ## Security and limitations
 
-Darkelf Cocoa is a privacy-oriented browser, not a promise of complete anonymity or forensic resistance. Browser Lock protects access through the running app but does not replace macOS FileVault, a secure account password, or device-level security controls. Some websites may require compatibility adjustments, and blocking behavior can vary by site.
+Darkelf Cocoa is a privacy-oriented browser, not a promise of complete anonymity or forensic resistance. Browser Lock protects access through the running app but does not replace macOS FileVault, a secure account password, or device-level security controls.
+
+Some websites may require compatibility adjustments, and blocking behavior can vary by site. WebKit content blocking does not guarantee that every advertisement, tracker, or page placeholder will be removed.
 
 ## License
 
