@@ -1,70 +1,100 @@
-# 🧿 Darkelf Cocoa Browser
+# 🍫 Darkelf Cocoa Browser
 
-[![PyPI Version](https://img.shields.io/pypi/v/darkelf-cocoa?label=PyPI&color=blue)](https://pypi.org/project/darkelf-cocoa/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/darkelf-cocoa)](https://pypi.org/project/darkelf-cocoa/)
-[![PyPI Downloads](https://static.pepy.tech/badge/darkelf-cocoa)](https://pepy.tech/projects/darkelf-cocoa)
-[![Monthly Downloads](https://static.pepy.tech/badge/darkelf-cocoa/month)](https://pepy.tech/projects/darkelf-cocoa)
+**A native macOS browser built with PyObjC and WebKit, designed for private, streamlined browsing.**
 
-**Native macOS browsing. Privacy by design.**
+[![PyPI version](https://img.shields.io/pypi/v/darkelf-cocoa.svg)](https://pypi.org/project/darkelf-cocoa/)
+[![Python versions](https://img.shields.io/pypi/pyversions/darkelf-cocoa.svg)](https://pypi.org/project/darkelf-cocoa/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/darkelf-cocoa.svg)](https://pypi.org/project/darkelf-cocoa/)
 
-Darkelf Cocoa is a privacy-focused browser powered by **Python, PyObjC, and Apple WebKit**. It pairs ephemeral browsing with fingerprinting defenses, native content blocking, local MiniAI Sentinel monitoring, and a customizable Cocoa interface.
+**Current release: v7.1.7** · **Platform: macOS** · **Engine: Apple WebKit**
 
-**Current release: v7.1.6** · macOS · DMG distribution
+[Website](https://darkelfbrowser.com) · [Releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases) · [Source code](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser)
 
-## ✨ What's New in 7.1.6
+## About Darkelf Cocoa
 
-- **Fullscreen Hide behavior:** Corrected `⌘H` (Hide Darkelf Cocoa) and `⌥⌘H` (Hide Others) action handling when the browser window is maximized or in fullscreen. Verified by the developer in Python source mode.
-- **Menu color separation:** Retains the Darkelf Cocoa menu's selected accent-colored hover while preserving the distinct macOS Apple-menu appearance.
-- **Interface refinements:** Preserves the updated About presentation and customizable accent and background controls.
+Darkelf Cocoa is a macOS-native browser built using Python, PyObjC, AppKit, and Apple's WebKit framework. Its interface combines familiar browser navigation with built-in privacy controls, an ephemeral browsing approach, and customizable appearance.
 
-- **Native Darkelf Cocoa application menu:** About, License & Attribution, PyPI, and GitHub links open in Darkelf tabs, alongside standard Hide, Hide Others, and Quit actions.
-- **Menu hover-state refinement:** Moving between application-menu rows clears previous highlights, leaving only the hovered row in the selected accent color.
-- **Link destination preview:** Hover over a webpage link to see its URL in a compact, bottom-left, accent-bordered overlay; the preview hides when the pointer leaves.
-- **Expanded shortcut reference:** The in-app Keyboard Shortcuts menu now includes `⌘H` (Hide Darkelf Cocoa), `⌥⌘H` (Hide Others), and `⌘Q` (Quit).
-- **Site-based adblocking modes (Content Rules v15.28):** DW uses a compatibility-first **TRUSTED** profile; CNN and GameSpot use **PROTECTED** profiles with network blocking and existing cosmetic cleanup; other sites use **STANDARD** blocking. TRUSTED mode relaxes protection on DW to improve compatibility.
-- **CNN and GameSpot layout improvements:** Developer testing found the large black ad boxes removed; some empty ad containers or reserved whitespace still remain. DW loaded in the same test configuration.
-- **7.1.2 compatibility improvements retained:** ESPN, NBA, and NHL video playback was confirmed in developer testing; Adblock Tester scored **100/100** in that tested configuration. Results are not universal guarantees.
+Darkelf Cocoa is a separate implementation from Darkelf Shadow CE. It uses the system WebKit engine rather than QtWebEngine.
 
-## 🛡️ Privacy Features
+## Highlights
 
-- Ephemeral WebKit browsing and privacy-oriented session controls
-- Canvas and WebGL fingerprinting defenses
-- WebRTC restrictions and permission controls
-- Native WebKit ad/tracker filtering, EasyList network rules, site-based TRUSTED / PROTECTED / STANDARD compatibility profiles, and conservative cosmetic cleanup
-- Local **MiniAI Sentinel** for privacy-relevant activity monitoring
+### 🛡️ Privacy-first browsing
 
-Privacy protections are best-effort; no browser can guarantee anonymity or block every tracker.
+- Ephemeral browsing design that avoids maintaining a conventional persistent browsing-history database.
+- Built-in tracker and advertising content-rule defenses.
+- Site-aware protection policies, including trusted, protected, and standard handling where supported.
+- First-party/tab isolation architecture.
+- Privacy monitoring and a MiniAI status interface.
+- Session cleanup controls.
 
-## 🪟 Native macOS Experience
+Privacy defenses reduce exposure; they do not guarantee anonymity, block every tracker, or eliminate every possible macOS forensic artifact.
 
-Tabs, bookmarks, integrated address/search bar, keyboard shortcuts, customizable accent colors, Darkelf Home backgrounds, fullscreen support, native window arrangement controls, an accent-aware macOS application menu, and an unobtrusive link destination preview.
+### 🔒 Browser Lock — v7.1.7
 
-## 📦 Install
+An **optional Browser Lock** adds a local access check to the browser:
 
-1. Visit [Darkelf Cocoa GitHub Releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
-2. Select **v7.1.6** and download its macOS DMG.
-3. Open the DMG, drag Darkelf Cocoa to Applications, and launch.
+- Authenticate at startup when Browser Lock is enabled.
+- Re-lock after approximately **10 minutes of browser inactivity**.
+- Re-lock when the browser window is minimized to the Dock.
+- Unlock using the macOS authentication dialog, which can offer **Touch ID or the Mac account password**, depending on the device and its configuration.
+- Manage Browser Lock in **Privacy & Security**.
 
-Verify signing, notarization, and the installed DMG before publication; successful Python source-mode testing does not alone validate the packaged build.
+Darkelf Cocoa delegates authentication to macOS **LocalAuthentication**. It does not collect or store fingerprint data or your Mac password. Browser Lock is an application-level access feature, **not disk or memory encryption**.
 
-## ⌨️ Useful Shortcuts
+### 🎨 Native macOS interface
 
-| Shortcut | Action |
-|---|---|
-| `⌘T` / `⌘W` | New / close tab |
-| `⌘L` / `⌘R` | Address bar / reload |
-| `⌘F` | Find in page |
-| `⇧⌘C` | Copy page URL |
-| `⌃⌘F` | Toggle fullscreen |
-| `⌘H` / `⌥⌘H` | Hide Darkelf Cocoa / Hide Others |
-| `⌘Q` | Quit Darkelf Cocoa |
+- AppKit-based navigation, tabs, menus, and keyboard shortcuts.
+- Accent-color presets and background themes.
+- Accent-aware application/Dock icon and in-app Darkelf shield branding.
+- Native macOS appearance and window controls.
+- Integrated Find in Page, bookmarks, and download UI.
 
-## 🧪 Compatibility
+### ⌨️ Address bar and shortcuts
 
-Earlier developer testing confirmed ESPN, NBA, and NHL video playback, alongside a **100/100 Adblock Tester** result in an earlier tested configuration. In the current v15.28 content-rule test, DW, CNN, and GameSpot loaded; CNN and GameSpot no longer displayed the large black ad boxes, although some empty ad containers remained. TRUSTED mode on DW prioritizes compatibility over full ad/tracker blocking. These observations are not guarantees for all websites or release builds; report reproducible issues with URLs and logs.
+- Right-click editing controls: **Cut**, **Copy**, **Paste**, **Paste and Go**, and **Select All**.
+- **⇧⌘V** — Paste and Go: navigate to a copied address or search the copied text using the existing address-bar behavior.
+- **⌘L** — Focus address bar.
+- **⌘T** — New tab; **⌘W** — Close tab.
+- **⌘R** — Reload; **⌘F** — Find in page.
+- Built-in Keyboard Shortcuts reference in the browser menu.
 
-## 📜 License
+## What's new in v7.1.7
 
-**LGPL-3.0-or-later** · See repository license and third-party notices.
+- Added opt-in Browser Lock with native macOS owner authentication.
+- Added startup, inactivity, and Dock-minimization lock triggers.
+- Added a dedicated Browser Lock information view in Privacy & Security.
+- Improved accent-color consistency across Darkelf shield branding and the native interface.
+- Added **Paste and Go** to the address-bar context menu and shortcut reference (**⇧⌘V**).
+- Continued interface and stability refinements.
 
-© 2025–2026 Darkelf Labs / Dr. Kevin Moore.
+See the [v7.1.7 release notes](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases) for the release overview.
+
+## Get Darkelf Cocoa
+
+Download the macOS build from [GitHub Releases](https://github.com/Darkelf-Labs/Darkelf-Cocoa-Browser/releases).
+
+A Python package is also available on [PyPI](https://pypi.org/project/darkelf-cocoa/). For a source/package installation, use an appropriate supported macOS Python environment and consult the repository's installation instructions and dependencies.
+
+```bash
+python3.11 -m pip install darkelf-cocoa
+```
+
+The packaged macOS application and Python-launched development environment may display different application names in native system authentication prompts.
+
+## Architecture
+
+Darkelf Cocoa uses **PyObjC + AppKit** for the native interface and **WKWebView/WebKit** for page rendering. Browser components are separated across modules for UI, tabs, policies, content rules, first-party isolation, monitoring, branding, and themes.
+
+It relies on the WebKit functionality provided by macOS; support for particular media formats, DRM systems, and websites may vary with the operating system and WebKit implementation.
+
+## Security and limitations
+
+Darkelf Cocoa is a privacy-oriented browser, not a promise of complete anonymity or forensic resistance. Browser Lock protects access through the running app but does not replace macOS FileVault, a secure account password, or device-level security controls. Some websites may require compatibility adjustments, and blocking behavior can vary by site.
+
+## License
+
+Licensed under **LGPL-3.0-or-later**. See the repository's license and third-party notices for the applicable terms.
+
+---
+
+**Darkelf Labs** · [darkelfbrowser.com](https://darkelfbrowser.com)
